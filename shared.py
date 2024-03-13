@@ -617,7 +617,7 @@ class TableInfo:
     def is_flush(self, cards: List[Card]) -> bool:
         return (
             all(card.suit == cards[0].suit for card in cards),
-            self.max_card_rank(cards),
+            sorted([card.rank for card in cards], reverse=True),
         )
 
     def is_4_of_a_kind(self, cards: List[Card]) -> tuple[bool, int]:
