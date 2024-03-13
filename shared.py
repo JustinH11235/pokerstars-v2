@@ -25,6 +25,8 @@ class GameState(Enum):
     #   handles disconnects/sit ins/outs etc. waits 2s
     #   if player has 0 money, force sit out
     END_HAND = 7
+    # process actions from players one at a time, combined with process_actions_next_state
+    PROCESS_ACTIONS = 8
 
 
 class PlayerState(Enum):
@@ -269,6 +271,7 @@ class TableInfo:
         self.sm_blind = sm_blind  # amt
         self.bg_blind = bg_blind  # amt
         self.game_state = GameState.GAME_NOT_STARTED
+        self.process_actions_next_state = None
         self.hand_num = 1
         self.players: List[PlayerInfo] = []
         # self.players: List[PlayerInfo] = [

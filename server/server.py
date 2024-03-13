@@ -1,11 +1,15 @@
+import sys
+import os
 from typing import List
 import random
+
+# import time
 
 import asyncio
 import socketio
 import uvicorn
 
-# import time
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from shared import (
     TableInfo,
     GameState,
@@ -100,16 +104,6 @@ TABLE_NAME = "Test Table 1"
 # sio_players = []
 
 
-def process_player_actions(table_info: TableInfo):
-    # loop until everyone has acted
-    while table_info.some_player_needs_to_act():
-        table_info.perform_next_player_action()
-        table_info.goToNextActionOnIfDone()
-        # need to do this because otherwise we need intermediate states
-        #  for each street for just processing player actions.
-        asyncio.sleep(1.5)
-
-
 def update_state_from_actions(table_info: TableInfo):
     if (
         table_info.game_state == GameState.GAME_NOT_STARTED
@@ -125,6 +119,7 @@ def update_state_from_actions(table_info: TableInfo):
                 player.state = PlayerState.IN_HAND
     elif table_info.game_state == GameState.BEFORE_HAND:
         # TODO handle sit ins here so people can join in this state until we get to 2
+        # set people's states to IN_HAND
         if table_info.get_num_active_players() >= 2:
             # move dealer, here because we need to wait to know who's in the hand to move the dealer
             if table_info.dealer is None:
@@ -142,62 +137,80 @@ def update_state_from_actions(table_info: TableInfo):
             table_info.deal_hole_cards()
             # if players are not all in, go to preflop, otherwise go to showdown/end hand
             table_info.go_to_showdown_or_end_hand_else(GameState.PREFLOP)
+    elif table_info.game_state == GameState.PROCESS_ACTIONS:
+        # process one person's action at a time
+        table_info.perform_next_player_action()
+        table_info.goToNextActionOnIfDone()
+
+        if not table_info.some_player_needs_to_act():
+            table_info.update_pots()
+            table_info.go_to_showdown_or_end_hand_else(
+                table_info.process_actions_next_state
+            )
+            table_info.process_actions_next_state = None
     elif table_info.game_state == GameState.PREFLOP:
         # set action on
         table_info.action_on = table_info.get_first_to_act_preflop()
         # loop until everyone has acted
-        process_player_actions(table_info)
-        # last thing, add bets to pot, create side pots
-        table_info.update_pots()
-        # go to showdown if everyone is all in, otherwise go to flop
-        table_info.go_to_showdown_or_end_hand_else(GameState.FLOP)
+        table_info.game_state = GameState.PROCESS_ACTIONS
+        table_info.process_actions_next_state = GameState.FLOP
+        # process_player_actions(table_info)
+        # # last thing, add bets to pot, create side pots
+        # table_info.update_pots()
+        # # go to showdown if everyone is all in, otherwise go to flop
+        # table_info.go_to_showdown_or_end_hand_else(GameState.FLOP)
     elif table_info.game_state == GameState.FLOP:
         # deal flop cards
         table_info.add_n_cards_to_board(3)
         # set action on
         table_info.action_on = table_info.get_first_to_act_postflop()
         # loop until everyone has acted
-        process_player_actions(table_info)
+        table_info.game_state = GameState.PROCESS_ACTIONS
+        table_info.process_actions_next_state = GameState.TURN
+        # process_player_actions(table_info)
         # last thing, add bets to pot, create side pots
-        table_info.update_pots()
+        # table_info.update_pots()
         # go to showdown if everyone is all in, otherwise go to flop
-        table_info.go_to_showdown_or_end_hand_else(GameState.TURN)
+        # table_info.go_to_showdown_or_end_hand_else(GameState.TURN)
     elif table_info.game_state == GameState.TURN:
         # deal turn card
         table_info.add_n_cards_to_board(1)
         # set action on
         table_info.action_on = table_info.get_first_to_act_postflop()
         # loop until everyone has acted
-        process_player_actions(table_info)
+        table_info.game_state = GameState.PROCESS_ACTIONS
+        table_info.process_actions_next_state = GameState.RIVER
+        # process_player_actions(table_info)
         # last thing, add bets to pot, create side pots
-        table_info.update_pots()
+        # table_info.update_pots()
         # go to showdown if everyone is all in, otherwise go to flop
-        table_info.go_to_showdown_or_end_hand_else(GameState.RIVER)
+        # table_info.go_to_showdown_or_end_hand_else(GameState.RIVER)
     elif table_info.game_state == GameState.RIVER:
         # deal river card
         table_info.add_n_cards_to_board(1)
         # set action on
         table_info.action_on = table_info.get_first_to_act_postflop()
         # loop until everyone has acted
-        process_player_actions(table_info)
+        table_info.game_state = GameState.PROCESS_ACTIONS
+        table_info.process_actions_next_state = GameState.SHOWDOWN
+        # process_player_actions(table_info)
         # last thing, add bets to pot, create side pots
-        table_info.update_pots()
+        # table_info.update_pots()
         # go to showdown if everyone is all in, otherwise go to flop
-        table_info.go_to_showdown_or_end_hand_else(GameState.SHOWDOWN)
+        # table_info.go_to_showdown_or_end_hand_else(GameState.SHOWDOWN)
     elif table_info.game_state == GameState.SHOWDOWN:
         # flip players cards
         table_info.show_eligible_players_cards()
-        # show remaining community cards one-by-one with timer between
+        # TODO2 show remaining community cards one-by-one with timer between
         while len(table_info.community_cards) < 5:
             table_info.add_n_cards_to_board(1)
-            asyncio.sleep(1)
+            # asyncio.sleep(1)
         table_info.game_state = GameState.END_HAND
     elif table_info.game_state == GameState.END_HAND:
-        pass
         # distributes pots to winners
         table_info.distribute_pots_to_winners()
         # handle sit outs/sit ins/disconnects (actually just do in start hand)
-        # set playerState to IN_HAND for all active players
+        # set playerState to IN_HAND for all active players (maybe do this in before hand also)
         for player in table_info.players:
             if player.state not in [
                 PlayerState.SITTING_OUT,
