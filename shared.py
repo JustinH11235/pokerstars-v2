@@ -327,7 +327,10 @@ class TableInfo:
     ) -> int:
         for i in range(self.num_seats):
             seat = (start_seat + i) % self.num_seats
-            if self.get_player_at_seat(seat).state not in filter:
+            if (
+                self.get_player_at_seat(seat) is not None
+                and self.get_player_at_seat(seat).state not in filter
+            ):
                 return seat
         return None
 
@@ -365,7 +368,10 @@ class TableInfo:
 
     def pay_blinds(self):
         small_blind_seat = self.get_small_blind_seat()
+        print(f"small_blind_seat: {small_blind_seat}")
         big_blind_seat = self.get_big_blind_seat()
+        print(f"big_blind_seat: {big_blind_seat}")
+        print(f"player seats: {[p.seat for p in self.players]}")
         small_blind_player = self.get_player_at_seat(small_blind_seat)
         big_blind_player = self.get_player_at_seat(big_blind_seat)
         sm_blind_charged = min(self.sm_blind, small_blind_player.stack)
@@ -799,7 +805,7 @@ class TableInfo:
         if player.state == PlayerState.ALL_IN or player.state == PlayerState.FOLDED:
             return False
         # edge case of BB preflop
-        if player.latest_bet_responded_to == self.latest_bet:
+        if player.last_bet_responded_to == self.latest_bet:
             return False
         return True
 

@@ -100,6 +100,16 @@ TABLE_NAME = "Test Table 1"
 # sio_players = []
 
 
+def process_player_actions(table_info: TableInfo):
+    # loop until everyone has acted
+    while table_info.some_player_needs_to_act():
+        table_info.perform_next_player_action()
+        table_info.goToNextActionOnIfDone()
+        # need to do this because otherwise we need intermediate states
+        #  for each street for just processing player actions.
+        asyncio.sleep(1.5)
+
+
 def update_state_from_actions(table_info: TableInfo):
     if (
         table_info.game_state == GameState.GAME_NOT_STARTED
@@ -136,9 +146,7 @@ def update_state_from_actions(table_info: TableInfo):
         # set action on
         table_info.action_on = table_info.get_first_to_act_preflop()
         # loop until everyone has acted
-        while table_info.some_player_needs_to_act():
-            table_info.perform_next_player_action()
-            table_info.goToNextActionOnIfDone()
+        process_player_actions(table_info)
         # last thing, add bets to pot, create side pots
         table_info.update_pots()
         # go to showdown if everyone is all in, otherwise go to flop
@@ -149,9 +157,7 @@ def update_state_from_actions(table_info: TableInfo):
         # set action on
         table_info.action_on = table_info.get_first_to_act_postflop()
         # loop until everyone has acted
-        while table_info.some_player_needs_to_act():
-            table_info.perform_next_player_action()
-            table_info.goToNextActionOnIfDone()
+        process_player_actions(table_info)
         # last thing, add bets to pot, create side pots
         table_info.update_pots()
         # go to showdown if everyone is all in, otherwise go to flop
@@ -162,9 +168,7 @@ def update_state_from_actions(table_info: TableInfo):
         # set action on
         table_info.action_on = table_info.get_first_to_act_postflop()
         # loop until everyone has acted
-        while table_info.some_player_needs_to_act():
-            table_info.perform_next_player_action()
-            table_info.goToNextActionOnIfDone()
+        process_player_actions(table_info)
         # last thing, add bets to pot, create side pots
         table_info.update_pots()
         # go to showdown if everyone is all in, otherwise go to flop
@@ -175,9 +179,7 @@ def update_state_from_actions(table_info: TableInfo):
         # set action on
         table_info.action_on = table_info.get_first_to_act_postflop()
         # loop until everyone has acted
-        while table_info.some_player_needs_to_act():
-            table_info.perform_next_player_action()
-            table_info.goToNextActionOnIfDone()
+        process_player_actions(table_info)
         # last thing, add bets to pot, create side pots
         table_info.update_pots()
         # go to showdown if everyone is all in, otherwise go to flop
@@ -228,6 +230,7 @@ async def game_loop():
         print("loop start")
         # check for NextPlayerActions and update state
         update_state_from_actions(table_info)
+        print(table_info.game_state)
         # Send updated TableInfo to everyone
         #  contains actions for players also
         send_updated_state_to_players(table_info)
