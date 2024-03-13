@@ -1,0 +1,5 @@
+# python 3.9.18
+art==6.1
+npyscreen==4.10.5
+python-socketio==5.11.1
+uvicorn==0.27.1
