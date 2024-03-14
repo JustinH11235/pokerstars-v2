@@ -231,6 +231,7 @@ async def send_updated_state_to_players(table_info: TableInfo):
         # get dict representing table_info (for each player's view, controls which cards they see, etc.)
         player_view = table_info.get_view(player)
         # send to each player
+        print(player_view)
         await sio.emit("updated_table_info", player_view, room=player.sio_id)
 
 

@@ -398,6 +398,8 @@ class LargeCardPool:
     def __init__(self, form_ref, num_initial_cards, card_width, card_height):
         self.cards = []
         self.form_ref = form_ref
+        self.card_width = card_width
+        self.card_height = card_height
         for _ in range(num_initial_cards):
             c = LargeCard(
                 card_width=card_width, card_height=card_height, form_ref=form_ref
@@ -445,9 +447,9 @@ class CardsContainer(npyscreen.BoxTitle):
         super().__init__(*args, **kwargs)
         self.hidden = True
 
-        self.MAX_CARDS = (
-            5  # TODO pass this in from server or None if server doesn't know
-        )
+        print(kwargs, file=sys.stderr)
+        # TODO pass this in from server or None if server doesn't know
+        self.MAX_CARDS = kwargs["max_cards"]  # 5
         self.LARGE_CARD_WIDTH = kwargs["large_card_width"]
         self.LARGE_CARD_HEIGHT = kwargs["large_card_height"]
         self.large_card_pool = LargeCardPool(
@@ -533,7 +535,9 @@ class MainForm(npyscreen.FormWithMenus):
     def create(self):
         self.ind = 0
         self.keypress_timeout = 1
-        NUM_SEATS = 9
+        self.num_seats = 3  # maybe have this "hardcoded" game creation screen
+        self.max_community_cards = 5  # have this hardcoded also from server
+        self.max_hole_cards = 2  # have this hardcoded also from server
 
         new_handlers = {
             # Set ctrl+Q to exit
@@ -544,7 +548,7 @@ class MainForm(npyscreen.FormWithMenus):
         self.add_handlers(new_handlers)
 
         y, x = self.useable_space()
-        board_height = y * 5 // 8  # just make it minus the bottons and player info
+        board_height = y * 5 // 8  # just make it minus the buttons and player info
         self.BoardArea = self.add(
             BoardArea, name="Board", editable=False, max_height=board_height
         )
@@ -596,6 +600,10 @@ class MainForm(npyscreen.FormWithMenus):
         )
         LARGE_CARD_WIDTH = 11
         LARGE_CARD_HEIGHT = 8
+        print(
+            f" hole cards container relx {self.HoleCards.relx} rely {self.HoleCards.rely} width {self.HoleCards.width -2} height {self.HoleCards.height -2 }",
+            file=sys.stderr,
+        )
         self.hole_cards_container = self.add(
             CardsContainer,
             large_card_width=LARGE_CARD_WIDTH,
@@ -607,8 +615,9 @@ class MainForm(npyscreen.FormWithMenus):
             rely=self.HoleCards.rely + 1,
             width=self.HoleCards.width - 2,
             height=self.HoleCards.height - 2,
+            max_cards=self.max_hole_cards,
         )
-        self.hole_cards_container.set_cards([0, 0, 0, 0, 0])  # TODO pass in card data
+        self.hole_cards_container.set_cards([0, 0])  # TODO pass in card data
 
         player_width = 20
         player_height = 5
@@ -624,7 +633,7 @@ class MainForm(npyscreen.FormWithMenus):
             self.BoardArea.height * 2 - 4 - math.ceil(player_height / 2 * 2 * 2)
         ) // 2
         e = Ellipse(seat_circle_radius_x, seat_circle_radius_y)
-        seat_positions = e.get_n_arc_length_equidistant_pts(NUM_SEATS)
+        seat_positions = e.get_n_arc_length_equidistant_pts(self.num_seats)
         seat = 1
         for delta_x, delta_y in seat_positions:
             player_x = math.ceil(centerx + (delta_x))
@@ -656,7 +665,7 @@ class MainForm(npyscreen.FormWithMenus):
             + (self.BoardArea.width // 2)
             + (3 * LARGE_CARD_WIDTH // 2)
         )
-        while left_large >= 0 and right_large < x:
+        while left_large >= 1 and right_large < x - 1:
             test_left = left_large - 1
             test_right = right_large + 1
             would_hit_seat = False
@@ -674,12 +683,14 @@ class MainForm(npyscreen.FormWithMenus):
             left_large = test_left
             right_large = test_right
         possible_large_card_width = right_large - left_large + 1
-        if possible_large_card_width >= 3 * LARGE_CARD_WIDTH:
+        if possible_large_card_width >= self.max_community_cards * LARGE_CARD_WIDTH:
+            print("large enough", file=sys.stderr)
             community_card_width = possible_large_card_width
             community_card_height = LARGE_CARD_HEIGHT
             community_card_relx = left_large
             community_card_rely = top_large
         else:
+            print("not large enough", file=sys.stderr)
             middle_y = self.BoardArea.rely + (self.BoardArea.height // 2)
             top_large = middle_y
             bottom_large = middle_y
@@ -707,12 +718,16 @@ class MainForm(npyscreen.FormWithMenus):
             community_card_height = 1
             community_card_relx = left_large
             community_card_rely = right_large
-
+        print(
+            f"relx {community_card_relx} rely {community_card_rely} width {community_card_width} height {community_card_height}",
+            file=sys.stderr,
+        )
         self.community_cards_container = self.add(
             CardsContainer,
             editable=False,
             large_card_width=LARGE_CARD_WIDTH,
             large_card_height=LARGE_CARD_HEIGHT,
+            max_cards=self.max_community_cards,
             relx=community_card_relx,
             rely=community_card_rely,
             width=community_card_width,
@@ -868,7 +883,11 @@ def on_my_response(data):
 
 @sio.on("updated_table_info")
 def on_updated_table_info(data):
-    print(data, file=sys.stderr)
+    # print(data, file=sys.stderr)
+    MyApp.getForm("MAIN").name = data["name"]
+    MyApp.getForm("MAIN").num_seats = str(data["num_seats"])
+    # MyApp.getForm("MAIN").BoardArea.footer = "I received a message! " + str(data)
+    MyApp.getForm("MAIN").display()
 
 
 def connect_to_server():
