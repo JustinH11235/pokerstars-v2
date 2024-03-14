@@ -84,15 +84,22 @@ class HoleCards(npyscreen.BoxTitle):
     pass
 
 
+class SeatBox(npyscreen.BoxTitle):
+    _contained_widget = npyscreen.MultiLineEdit
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
 class NewMultiLineEdit(npyscreen.MultiLineEdit):
     def on_left(self, _):
-        if self.value != "":
+        if self.cursor_position > 0:
             self.h_cursor_left(None)
         else:
             self.h_exit_left(None)
 
     def on_right(self, _):
-        if self.value != "":
+        if self.cursor_position < len(self.value) - 1:
             self.h_cursor_right(None)
         else:
             self.h_exit_right(None)
@@ -105,13 +112,6 @@ class NewMultiLineEdit(npyscreen.MultiLineEdit):
                 curses.KEY_RIGHT: self.on_right,
             }
         )
-
-
-class SeatBox(npyscreen.BoxTitle):
-    _contained_widget = NewMultiLineEdit
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
 
 
 class BetBox(npyscreen.BoxTitle):
@@ -586,7 +586,7 @@ class MainForm(npyscreen.FormWithMenus):
         self.CallButton = self.add(
             CallButtonBox,
             height=BUTTON_HEIGHT,
-            width=13,
+            width=16,
             relx=self.CheckButton.relx + self.CheckButton.width + 1,
             rely=self.CheckButton.rely,
             contained_widget_arguments={
@@ -951,9 +951,23 @@ def on_updated_table_info(data):
                     form.BetBox.name = "Bet"
                 else:
                     form.BetBox.name = "Raise"
+
+                form.CheckButton.hidden = not client_player_action["can_check"]
+                form.CallButton.hidden = not client_player_action["can_call"]
+                form.FoldButton.hidden = False
+                if form._widgets__[form.editw].hidden:
+                    form._widgets__[form.editw].entry_widget.h_exit_right(None)
+                # TODO call amount
+                if client_player_action["can_call"]:
+                    form.CallButton.name = f"{client_player_action['call_amount']}"
             else:
                 # don't have any action
                 form.BetBox.hidden = True
+                form.CheckButton.hidden = True
+                form.CallButton.hidden = True
+                form.FoldButton.hidden = True
+                if form._widgets__[form.editw].hidden:
+                    form._widgets__[form.editw].entry_widget.h_exit_right(None)
         seat = player["seat"]
         seat_name = f"{player['name']}"
         if data["dealer"] == seat:

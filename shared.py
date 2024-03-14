@@ -262,7 +262,7 @@ class ClientPlayerAction:
         action=ClientPlayerState.NO_ACTION,
         message=None,
         can_check=None,
-        # can_call=None,
+        can_call=None,
         call_amount=None,
         can_raise=None,
         bet_instead_of_raise=None,
@@ -278,7 +278,7 @@ class ClientPlayerAction:
         # calling includes All-ins when stack <= last bet
         # raising includes All-ins when stack > last_bet
         # betting includes All-ins all the time, only other option is check
-        # self.can_call = can_call  # if not, must all-in or fold (calling > stack)
+        self.can_call = can_call  # if not, must be able to check
         self.call_amount = call_amount  # if can_call is true
         self.can_raise = (
             can_raise  # may not if all-in doesn't reopen action or (stack < last bet)
@@ -302,7 +302,7 @@ class ClientPlayerAction:
             "action": self.action.encode(),
             "message": self.message,
             "can_check": self.can_check,
-            # "can_call": self.can_call,
+            "can_call": self.can_call,
             "call_amount": self.call_amount,
             "can_raise": self.can_raise,
             "bet_instead_of_raise": self.bet_instead_of_raise,
@@ -651,6 +651,7 @@ class TableInfo:
 
     def initialize_client_player_action(self, player):
         can_check = player.current_bet == self.latest_bet
+        can_call = player.current_bet < self.latest_bet
         call_amount = min(self.latest_bet, player.stack)
         can_raise = (
             player.stack > self.latest_bet
@@ -663,6 +664,7 @@ class TableInfo:
             action_num=self.action_num,
             action=ClientPlayerState.CHOOSE_BET,
             can_check=can_check,
+            can_call=can_call,
             call_amount=call_amount,
             can_raise=can_raise,
             bet_instead_of_raise=bet_instead_of_raise,
