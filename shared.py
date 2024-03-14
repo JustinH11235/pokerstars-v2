@@ -3,6 +3,7 @@ from enum import Enum
 import secrets
 from collections import defaultdict
 import json
+import time
 
 sys_rand = secrets.SystemRandom()
 
@@ -22,6 +23,7 @@ class GameState(Enum):
     TURN = 4
     RIVER = 5
     SHOWDOWN = 6  # if more than 1 player left after river, show down, else end hand
+    SHOWDOWN_RUNOUT = 60  # used to flip cards one at a time
     # updates stacks, hand info, action_num=0, sets playerState to IN_HAND
     #   handles disconnects/sit ins/outs etc. waits 2s
     #   if player has 0 money, force sit out
@@ -230,19 +232,19 @@ class ClientNextAction:
     def __init__(
         self,
         action,
-        hand_num,
-        action_num,
+        # hand_num,
+        # action_num,
         bet_amount=None,
     ):
-        self.hand_num = hand_num
-        self.action_num = action_num
+        # self.hand_num = hand_num
+        # self.action_num = action_num
         self.action: ClientNextActionType = action
         self.bet_amount = bet_amount  # only used for ClientNextActionType.BET
 
     def get_view(self):
         return {
-            "hand_num": self.hand_num,
-            "action_num": self.action_num,
+            # "hand_num": self.hand_num,
+            # "action_num": self.action_num,
             "action": self.action.encode(),
             "bet_amount": self.bet_amount,
         }
@@ -317,12 +319,12 @@ class PlayerInfo:
         self.name = name  # unique among players at table
         self.buy_in_amount = 0
         self.stack = 0
-        self.buy_in(10_000)
         self.seat = seat
         # could change if I make sure click sit
         self.state: PlayerState = PlayerState.NOT_IN_HAND
         self.current_bet = 0
-        self.last_full_raise_responded_to = None  # determines if action is re-opened
+        # determines if action is re-opened
+        self.last_full_raise_responded_to = None
         self.last_bet_responded_to = None
         self.is_all_in = False  # just for displaying to clients
         self.client_player_action: ClientPlayerAction = None
@@ -421,17 +423,16 @@ class TableInfo:
         # ]
         self.main_pot: Pot = Pot()
         self.side_pots: List[Pot] = []
-        self.deck: Deck = Deck()
+        self.deck: Deck = None
         self.community_cards: List[Card] = []
         self.dealer = None  # seat index
         self.action_num = 0  # identifies which action a player is responding to
         self.action_on = None  # None if waiting for everyone?
-        self.latest_bet = (
-            None  # used to calculate how much a call is, the max bet so far.
-        )
+        # used to calculate how much a call is, the max bet so far.
+        self.latest_bet = 0
         self.latest_full_raise = None  # used to calculate min raises
         self.min_raise = None
-        self.end_hand_time_start = None  # time.time() when hand ended
+        self.hand_start_time = None
         # TODO2: keep table history/log of actions
 
     def add_player(self, name, seat, sio_id):
@@ -537,10 +538,10 @@ class TableInfo:
         self.latest_bet = max(bg_blind_charged, sm_blind_charged)
         self.min_raise = 2 * self.bg_blind
         self.latest_full_raise = self.bg_blind
-        small_blind_player.last_full_raise_responded_to = 0
-        big_blind_player.last_full_raise_responded_to = 0
-        small_blind_player.last_bet_responded_to = sm_blind_charged
-        big_blind_player.last_bet_responded_to = bg_blind_charged
+        small_blind_player.last_full_raise_responded_to = None
+        big_blind_player.last_full_raise_responded_to = None
+        # small_blind_player.last_bet_responded_to = sm_blind_charged
+        # big_blind_player.last_bet_responded_to = bg_blind_charged
 
     def deal_card_to_player(self, player: PlayerInfo):
         card = self.deck.draw_card()
@@ -557,6 +558,40 @@ class TableInfo:
             if player.state == PlayerState.IN_HAND:
                 self.deal_card_to_player(player)
             seat = self.get_next_seat(seat, ACTIVE_PLAYER_STATES)
+
+    def new_hand_reset_state(self):
+        self.process_actions_next_state = None
+        self.main_pot = Pot()
+        self.side_pots = []
+        self.deck = Deck()
+        self.community_cards = []
+        self.latest_bet = 0
+        self.latest_full_raise = None
+        self.min_raise = None
+        self.hand_start_time = time.time()
+        for player in self.players:
+            if player.state in ACTIVE_PLAYER_STATES:
+                player.state = PlayerState.IN_HAND
+                player.current_bet = 0
+                player.last_full_raise_responded_to = None
+                player.last_bet_responded_to = None
+                player.is_all_in = False
+                player.client_player_action = None
+                player.hole_cards = []
+
+    def new_street_reset_player_bet_info(self):
+        self.process_actions_next_state = None
+        self.latest_bet = 0
+        self.latest_full_raise = 0
+        self.min_raise = self.bg_blind
+        for player in self.players:
+            if player.state in ACTIVE_PLAYER_STATES:
+                player.state = PlayerState.IN_HAND
+                player.current_bet = 0
+                player.last_full_raise_responded_to = None
+                player.last_bet_responded_to = None
+                # dont reset all-in status between streets
+                player.client_player_action = None
 
     # raise rules, PREFLOP min raise is 2x BB, after that min raise is previous raise
     # if someone raises with less than a min-raise, options are fold/call for people who
@@ -581,7 +616,7 @@ class TableInfo:
                 p.client_player_action = None
         elif p.client_player_action.next_action.action == ClientNextActionType.CALL:
             # call is the min(last bet, stack)
-            call_amt = min(self.latest_bet, p.stack)
+            call_amt = min(self.latest_bet, p.stack + p.current_bet)
             if call_amt == p.stack:
                 if p.bet(call_amt) is not None:
                     # bet should always work
@@ -652,7 +687,7 @@ class TableInfo:
     def initialize_client_player_action(self, player):
         can_check = player.current_bet == self.latest_bet
         can_call = player.current_bet < self.latest_bet
-        call_amount = min(self.latest_bet, player.stack)
+        call_amount = min(self.latest_bet, player.stack + player.current_bet)
         can_raise = (
             player.stack > self.latest_bet
             and player.last_full_raise_responded_to != self.latest_full_raise
@@ -704,6 +739,9 @@ class TableInfo:
             if player.current_bet > 0:
                 players_who_bet_money.append(player)
         players_who_bet_money.sort(key=lambda x: x.current_bet)
+        print("UPDATE POTS")
+        for player in players_who_bet_money:
+            print(f"{player.name} current_bet: {player.current_bet}")
         while len(players_who_bet_money) > 0:
             lowest_committed_bet = players_who_bet_money[0].current_bet
             # if this player isn't eligible, just add to main pot
@@ -744,32 +782,35 @@ class TableInfo:
 
     def is_straight(self, cards: List[Card]) -> bool:
         # 12 is Ace
-        new_cards = sorted(
-            [card for card in cards if card.rank != 12], key=lambda x: x.rank
-        )
-        if len(new_cards) == 5:
-            for i in range(1, 5):
-                if new_cards[i].rank != new_cards[i - 1].rank + 1:
+        if len([card for card in cards if card.rank == 12]) > 1:
+            return (False,)
+        elif len([card for card in cards if card.rank == 12]) == 0:
+            sorted_cards = sorted(cards, key=lambda x: x.rank)
+            for i in range(1, len(cards)):
+                if sorted_cards[i].rank != sorted_cards[i - 1].rank + 1:
                     return (False,)
-            return (True, self.max_card_rank(new_cards))
-        elif len(new_cards) == 4:
-            new_cards2 = new_cards + [12]
+            return (True, self.max_card_rank(sorted_cards))
+        else:  # 1 ace
+            ace = [card for card in cards if card.rank == 12][0]
+            cards_without_ace = sorted(
+                [card for card in cards if card.rank != 12], key=lambda x: x.rank
+            )
+            new_cards = cards_without_ace + [ace]
             found_straight = True
-            for i in range(1, 5):
-                if new_cards2[i].rank != new_cards2[i - 1].rank + 1:
+            for i in range(1, len(new_cards)):
+                if new_cards[i].rank != new_cards[i - 1].rank + 1:
                     found_straight = False
             if found_straight:
-                return (True, self.max_card_rank(new_cards2))
+                return (True, self.max_card_rank(new_cards))
             found_straight = True
-            new_cards2 = [-1] + new_cards
-            for i in range(1, 5):
+            new_cards2 = [ace] + new_cards
+            for i in range(1, len(new_cards2)):
                 if new_cards2[i].rank != new_cards2[i - 1].rank + 1:
                     found_straight = False
             if found_straight:
                 return (True, self.max_card_rank(new_cards2))
             else:
                 return (False,)
-        return (False,)
 
     def is_flush(self, cards: List[Card]) -> bool:
         return (
@@ -833,10 +874,11 @@ class TableInfo:
         pair = None
         kickers = []
         for rank, count in card_counts.items():
-            if count == 2:
+            if count == 2 and pair is None:
                 pair = rank
             else:
-                kickers.append(rank)
+                for _ in range(count):
+                    kickers.append(rank)
         if pair is not None:
             kickers.sort(reverse=True)
             return (True, pair, kickers[0], kickers[1], kickers[2])
@@ -908,10 +950,8 @@ class TableInfo:
         best_hand_strength = max(hand_strengths, key=lambda x: x[0])[0]
         return [p for (hs, p) in hand_strengths if hs == best_hand_strength]
 
-    def distribute_pot_to_winners(self, pot):
-        winning_players = self.calculate_winning_players(
-            [p for p in pot.players_eligible if p.state in POT_ELIGIBLE_PLAYER_STATES]
-        )
+    def distribute_pot_to_winners(self, pot, eligible_players):
+        winning_players = self.calculate_winning_players(eligible_players)
         for player in winning_players:
             player.stack += pot.pot_size // len(winning_players)
         rem = pot.pot_size % len(winning_players)
@@ -920,14 +960,26 @@ class TableInfo:
                 player.stack += 1
                 rem -= 1
 
+    def distribute_side_pot_to_winners(self, pot):
+        self.distribute_pot_to_winners(
+            pot,
+            [p for p in pot.players_eligible if p.state in POT_ELIGIBLE_PLAYER_STATES],
+        )
+
+    def distribute_main_pot_to_winners(self):
+        self.distribute_pot_to_winners(
+            self.main_pot,
+            [p for p in self.players if p.state in POT_ELIGIBLE_PLAYER_STATES],
+        )
+
     # if there's a split pot, odd chips go to earliest position
     # order of resolution: best hand first, so go from most eligible players to least,
     #   that way the player with the best hand gets paid first
     def distribute_pots_to_winners(self):
         while len(self.side_pots) > 0:
             pot = self.side_pots.pop(0)
-            self.distribute_pot_to_winners(pot)
-        self.distribute_pot_to_winners(self.main_pot)
+            self.distribute_side_pot_to_winners(pot)
+        self.distribute_main_pot_to_winners()
         self.main_pot = Pot()
 
     def show_eligible_players_cards(self):
@@ -959,11 +1011,17 @@ class TableInfo:
         return any(self.player_needs_to_act(player) for player in self.players)
 
     def player_needs_to_act(self, player: PlayerInfo):
+        if player.state not in MAY_NEED_TO_ACT_PLAYER_STATES:
+            print(f"player_needs_to_act: {player.name} false")
+            return False
         if player.state == PlayerState.ALL_IN or player.state == PlayerState.FOLDED:
+            print(f"player_needs_to_act: {player.name} false 2")
             return False
         # edge case of BB preflop
         if player.last_bet_responded_to == self.latest_bet:
+            print(f"player_needs_to_act: {player.name} false 3")
             return False
+        print(f"player_needs_to_act: {player.name} true")
         return True
 
     def get_view(self, player):

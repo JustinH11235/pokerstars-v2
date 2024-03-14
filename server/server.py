@@ -16,6 +16,8 @@ from shared import (
     PlayerState,
     ClientPlayerState,
     ClientPlayerAction,
+    ClientNextAction,
+    ClientNextActionType,
     PlayerInfo,
     Pot,
     Deck,
@@ -56,6 +58,63 @@ async def disconnect(sid):
 async def on_my_event(sid, data):
     print("got my_event " + str(data["data"]))
     # await self.emit('my_response', data)
+
+
+@sio.on("player_bet")
+async def on_player_bet(sid, data):
+    print(f"got player_bet event {data}\n\n\n")
+    p = table_info.get_player_by_sio_id(sid)
+    if p is not None and p.client_player_action is not None:
+        if (
+            p.client_player_action.hand_num == data["hand_num"]
+            and p.client_player_action.action_num == data["action_num"]
+        ):
+            p.client_player_action.next_action = ClientNextAction(
+                action=ClientNextActionType.BET,
+                bet_amount=data["bet_amount"],
+            )
+
+
+@sio.on("player_checked")
+async def on_player_checked(sid, data):
+    print(f"got player checked event {data}\n\n\n")
+    p = table_info.get_player_by_sio_id(sid)
+    if p is not None and p.client_player_action is not None:
+        if (
+            p.client_player_action.hand_num == data["hand_num"]
+            and p.client_player_action.action_num == data["action_num"]
+        ):
+            p.client_player_action.next_action = ClientNextAction(
+                action=ClientNextActionType.CHECK,
+            )
+
+
+@sio.on("player_called")
+async def on_player_called(sid, data):
+    print(f"got player called event {data}\n\n\n")
+    p = table_info.get_player_by_sio_id(sid)
+    if p is not None and p.client_player_action is not None:
+        if (
+            p.client_player_action.hand_num == data["hand_num"]
+            and p.client_player_action.action_num == data["action_num"]
+        ):
+            p.client_player_action.next_action = ClientNextAction(
+                action=ClientNextActionType.CALL,
+            )
+
+
+@sio.on("player_folded")
+async def on_player_called(sid, data):
+    print(f"got player folded event {data}\n\n\n")
+    p = table_info.get_player_by_sio_id(sid)
+    if p is not None and p.client_player_action is not None:
+        if (
+            p.client_player_action.hand_num == data["hand_num"]
+            and p.client_player_action.action_num == data["action_num"]
+        ):
+            p.client_player_action.next_action = ClientNextAction(
+                action=ClientNextActionType.FOLD,
+            )
 
 
 # async def poker():
@@ -119,11 +178,17 @@ async def update_state_from_actions(table_info: TableInfo):
             ]:
                 player.state = PlayerState.IN_HAND
     elif table_info.game_state == GameState.BEFORE_HAND:
+        # reset state for new hand
+        table_info.new_hand_reset_state()
         # TODO handle sit ins here so people can join in this state until we get to 2
         # remove disconnected players for now, later we'd want to allow people to reconnect under the same name
         for player in table_info.players:
             if not player.is_connected:
                 table_info.players.remove(player)
+        # TODO2 if someone has 0 stack, rebuy them for now
+        for player in table_info.players:
+            if player.stack == 0:
+                player.buy_in(10_000)
         # set people's states to IN_HAND
         for player in table_info.players:
             if player.state not in [
@@ -151,7 +216,6 @@ async def update_state_from_actions(table_info: TableInfo):
     elif table_info.game_state == GameState.PROCESS_ACTIONS:
         # process one person's action at a time
         table_info.perform_next_player_action()
-        table_info.goToNextActionOnIfDone()
 
         if not table_info.some_player_needs_to_act():
             table_info.update_pots()
@@ -159,9 +223,10 @@ async def update_state_from_actions(table_info: TableInfo):
                 table_info.process_actions_next_state
             )
             table_info.process_actions_next_state = None
+        else:
+            table_info.goToNextActionOnIfDone()
     elif table_info.game_state == GameState.PREFLOP:
-        # TODO temp
-        table_info.add_n_cards_to_board(3)
+        # don't reset player bet bookkeeping info, blinds have been paid
         # set action on
         table_info.action_on = table_info.get_first_to_act_preflop()
         # loop until everyone has acted
@@ -173,6 +238,8 @@ async def update_state_from_actions(table_info: TableInfo):
         # # go to showdown if everyone is all in, otherwise go to flop
         # table_info.go_to_showdown_or_end_hand_else(GameState.FLOP)
     elif table_info.game_state == GameState.FLOP:
+        # reset player bet bookkeeping info
+        table_info.new_street_reset_player_bet_info()
         # deal flop cards
         table_info.add_n_cards_to_board(3)
         # set action on
@@ -186,6 +253,8 @@ async def update_state_from_actions(table_info: TableInfo):
         # go to showdown if everyone is all in, otherwise go to flop
         # table_info.go_to_showdown_or_end_hand_else(GameState.TURN)
     elif table_info.game_state == GameState.TURN:
+        # reset player bet bookkeeping info
+        table_info.new_street_reset_player_bet_info()
         # deal turn card
         table_info.add_n_cards_to_board(1)
         # set action on
@@ -199,6 +268,8 @@ async def update_state_from_actions(table_info: TableInfo):
         # go to showdown if everyone is all in, otherwise go to flop
         # table_info.go_to_showdown_or_end_hand_else(GameState.RIVER)
     elif table_info.game_state == GameState.RIVER:
+        # reset player bet bookkeeping info
+        table_info.new_street_reset_player_bet_info()
         # deal river card
         table_info.add_n_cards_to_board(1)
         # set action on
@@ -215,11 +286,14 @@ async def update_state_from_actions(table_info: TableInfo):
         # flip players cards
         table_info.show_eligible_players_cards()
         # TODO2 show remaining community cards one-by-one with timer between
-        while len(table_info.community_cards) < 5:
+        table_info.game_state = GameState.SHOWDOWN_RUNOUT
+    elif table_info.game_state == GameState.SHOWDOWN_RUNOUT:
+        if len(table_info.community_cards) < 5:
             table_info.add_n_cards_to_board(1)
-            # asyncio.sleep(1)
-        table_info.game_state = GameState.END_HAND
+        if len(table_info.community_cards) == 5:
+            table_info.game_state = GameState.END_HAND
     elif table_info.game_state == GameState.END_HAND:
+        await asyncio.sleep(3)
         # distributes pots to winners
         table_info.distribute_pots_to_winners()
         # handle sit outs/sit ins/disconnects (actually just do in start hand)

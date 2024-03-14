@@ -13,6 +13,7 @@ from shared import (
     ClientNextActionType,
     ClientNextAction,
     ClientPlayerState,
+    PlayerState,
 )
 
 import socketio
@@ -99,7 +100,7 @@ class NewMultiLineEdit(npyscreen.MultiLineEdit):
             self.h_exit_left(None)
 
     def on_right(self, _):
-        if self.cursor_position < len(self.value) - 1:
+        if self.cursor_position < len(self.value):
             self.h_cursor_right(None)
         else:
             self.h_exit_right(None)
@@ -144,21 +145,27 @@ class BetBox(npyscreen.BoxTitle):
         )
 
     def on_activate(self):
-        if "\n" in self.parent.BetBox.value:
-            the_bet = self.parent.BetBox.value.split("\n")[0]
-            if the_bet.isdigit() and int(the_bet) > 0:
+        submit = "\n" in self.parent.BetBox.value
+        self.parent.BetBox.value = "".join(
+            [i for i in self.parent.BetBox.value if i.isdigit() and i != "\n"]
+        )
+        if submit:
+            the_bet = self.parent.BetBox.value
+            if (
+                the_bet.isdigit()
+                and int(the_bet) > 0
+                and (self.min_raise is None or int(the_bet) >= self.min_raise)
+            ):
                 the_bet = int(the_bet)
-            # temp
-            # self.parent.HoleCards.footer = "bet clicked"
-            # self.parent.HoleCards.display()
-            #
-            # send to server after doing checks TODO
-            self.parent.BetBox.value = ""
-        else:
-            self.parent.BetBox.value = "".join(
-                [i for i in self.parent.BetBox.value if i.isdigit() or i == "\n"]
-            )
-        pass
+                sio.emit(
+                    "player_bet",
+                    {
+                        "hand_num": client_player_action["hand_num"],
+                        "action_num": client_player_action["action_num"],
+                        "bet_amount": the_bet,
+                    },
+                )
+                self.parent.BetBox.value = ""
 
     def whenPressed(self):
         self.on_activate()
@@ -169,6 +176,7 @@ class BetBox(npyscreen.BoxTitle):
             self.on_activate()
 
     def when_value_edited(self):
+        self.parent.BoardArea.footer = "value edited"
         self.on_activate()
 
 
@@ -188,11 +196,13 @@ class BoardArea(npyscreen.BoxTitle):
 
 class CheckButton(npyscreen.ButtonPress):
     def on_activate(self):
-        # temp
-        # self.parent.HoleCards.footer = "check clicked"
-        # self.parent.HoleCards.display()
-        #
-        pass
+        sio.emit(
+            "player_checked",
+            {
+                "hand_num": client_player_action["hand_num"],
+                "action_num": client_player_action["action_num"],
+            },
+        )
 
     def whenPressed(self):
         self.on_activate()
@@ -205,11 +215,13 @@ class CheckButton(npyscreen.ButtonPress):
 
 class CallButton(npyscreen.ButtonPress):
     def on_activate(self):
-        # temp
-        # self.parent.HoleCards.footer = "call clicked"
-        # self.parent.HoleCards.display()
-        #
-        pass
+        sio.emit(
+            "player_called",
+            {
+                "hand_num": client_player_action["hand_num"],
+                "action_num": client_player_action["action_num"],
+            },
+        )
 
     def whenPressed(self):
         self.on_activate()
@@ -222,11 +234,13 @@ class CallButton(npyscreen.ButtonPress):
 
 class FoldButton(npyscreen.ButtonPress):
     def on_activate(self):
-        # temp
-        # self.parent.HoleCards.footer = "fold clicked"
-        # self.parent.HoleCards.display()
-        #
-        pass
+        sio.emit(
+            "player_folded",
+            {
+                "hand_num": client_player_action["hand_num"],
+                "action_num": client_player_action["action_num"],
+            },
+        )
 
     def whenPressed(self):
         self.on_activate()
@@ -925,13 +939,13 @@ def on_updated_table_info(data):
         form.SeatBoxes[seat].name = ""
         form.SeatBoxes[seat]._my_widgets[0].value = ""
         form.SeatBoxes[seat].color = "DEFAULT"
+        form.SeatBoxes[seat].footer = ""
 
-    form.name = f'{data["name"]} ({data["sm_blind"]}/{data["bg_blind"]})'
+    form.name = f'{data["name"]} ({data["sm_blind"]}/{data["bg_blind"]}) - Hand #{data["hand_num"]}'
     form.num_seats = str(data["num_seats"])
-    # ignore hand_num
 
     if len(data["side_pots"]) > 0:
-        form.BoardArea.footer = f'Pot: {data["main_pot_including_bets"]} ⛁; Sidepots: {"⛁, ".join(d["pot_size"] for d in data["side_pots"])}'
+        form.BoardArea.footer = f'Pot: {data["main_pot_including_bets"]} ⛁; Sidepots: {"⛁, ".join(str(d["pot_size"]) for d in data["side_pots"])}'
     else:
         form.BoardArea.footer = f'Pot: {data["main_pot_including_bets"]} ⛁'  # \u26C3
 
@@ -942,32 +956,39 @@ def on_updated_table_info(data):
             my_seat = player["seat"]
             form.hole_cards_container.set_cards(player["hole_cards"])
             if player["client_player_action"] is not None:
-                form.BetBox.hidden = False
                 client_player_action = player["client_player_action"]
-                form.BetBox.min_raise = client_player_action["min_raise"]
-                if form.BetBox.value == "":
-                    form.BetBox.value = str(client_player_action["min_raise"])
-                if client_player_action["bet_instead_of_raise"]:
-                    form.BetBox.name = "Bet"
+                if client_player_action["can_raise"]:
+                    form.BetBox.hidden = False
+                    form.BetBox.min_raise = client_player_action["min_raise"]
+                    if form.BetBox.value == "":
+                        form.BetBox.value = str(client_player_action["min_raise"])
+                    if client_player_action["bet_instead_of_raise"]:
+                        form.BetBox.name = "Bet"
+                    else:
+                        form.BetBox.name = "Raise"
                 else:
-                    form.BetBox.name = "Raise"
+                    form.BetBox.hidden = True
 
                 form.CheckButton.hidden = not client_player_action["can_check"]
                 form.CallButton.hidden = not client_player_action["can_call"]
                 form.FoldButton.hidden = False
                 if form._widgets__[form.editw].hidden:
                     form._widgets__[form.editw].entry_widget.h_exit_right(None)
-                # TODO call amount
                 if client_player_action["can_call"]:
                     form.CallButton.name = f"{client_player_action['call_amount']}"
             else:
                 # don't have any action
+                form.BetBox.min_raise = None
+                form.BetBox.value = ""
                 form.BetBox.hidden = True
                 form.CheckButton.hidden = True
                 form.CallButton.hidden = True
                 form.FoldButton.hidden = True
                 if form._widgets__[form.editw].hidden:
                     form._widgets__[form.editw].entry_widget.h_exit_right(None)
+        else:
+            # TODO display opponents hole cards somewhere
+            pass
         seat = player["seat"]
         seat_name = f"{player['name']}"
         if data["dealer"] == seat:
@@ -975,13 +996,30 @@ def on_updated_table_info(data):
         form.SeatBoxes[seatbox_ind_from_seat(seat)].name = seat_name
         inside_box_text = [
             f"Stack: {player['stack']} ⛁",
-            f"Bet: {player['current_bet']} ⛁",
+            # f"Bet: {player['current_bet']} ⛁",
         ]
+        if player["current_bet"] > 0:
+            inside_box_text.append(f"Bet: {player['current_bet']} ⛁")
         form.SeatBoxes[seatbox_ind_from_seat(seat)]._my_widgets[0].value = "\n\n".join(
             inside_box_text
         )
+        p_state = PlayerState.decode(player["state"])
+        last_action_text = None
+        if p_state == PlayerState.FOLDED:
+            last_action_text = "Folded"
+        elif p_state == PlayerState.ALL_IN:
+            last_action_text = "All In"
+        elif p_state == PlayerState.CHECKED:
+            last_action_text = "Checked"
+        elif p_state == PlayerState.CALLED:
+            last_action_text = "Called"
+        elif p_state == PlayerState.BET:
+            last_action_text = f"Bet {player['current_bet']}"
+        if last_action_text != None:
+            form.SeatBoxes[seatbox_ind_from_seat(seat)].footer = last_action_text
 
     if data["action_on"] is not None:
+        form.SeatBoxes[seatbox_ind_from_seat(data["action_on"])].footer = ""
         form.SeatBoxes[seatbox_ind_from_seat(data["action_on"])].color = ACTION_ON_COLOR
 
     form.display()
