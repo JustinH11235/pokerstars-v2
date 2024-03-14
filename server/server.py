@@ -104,7 +104,7 @@ TABLE_NAME = "Test Table 1"
 # sio_players = []
 
 
-def update_state_from_actions(table_info: TableInfo):
+async def update_state_from_actions(table_info: TableInfo):
     if (
         table_info.game_state == GameState.GAME_NOT_STARTED
     ):  # not used atm, but will after we add a Start Game button
@@ -119,6 +119,10 @@ def update_state_from_actions(table_info: TableInfo):
                 player.state = PlayerState.IN_HAND
     elif table_info.game_state == GameState.BEFORE_HAND:
         # TODO handle sit ins here so people can join in this state until we get to 2
+        # remove disconnected players for now, later we'd want to allow people to reconnect under the same name
+        for player in table_info.players:
+            if not player.is_connected:
+                table_info.players.remove(player)
         # set people's states to IN_HAND
         if table_info.get_num_active_players() >= 2:
             # move dealer, here because we need to wait to know who's in the hand to move the dealer
@@ -222,8 +226,12 @@ def update_state_from_actions(table_info: TableInfo):
         table_info.game_state = GameState.BEFORE_HAND
 
 
-def send_updated_state_to_players(table_info: TableInfo):
-    pass
+async def send_updated_state_to_players(table_info: TableInfo):
+    for player in table_info.players:
+        # get dict representing table_info (for each player's view, controls which cards they see, etc.)
+        player_view = table_info.get_view(player)
+        # send to each player
+        await sio.emit("updated_table_info", player_view, room=player.sio_id)
 
 
 # modified by incoming events
@@ -240,13 +248,12 @@ async def game_loop():
         bg_blind=BG_BLIND,
     )
     while True:
-        print("loop start")
         # check for NextPlayerActions and update state
-        update_state_from_actions(table_info)
+        await update_state_from_actions(table_info)
         print(table_info.game_state)
         # Send updated TableInfo to everyone
         #  contains actions for players also
-        send_updated_state_to_players(table_info)
+        await send_updated_state_to_players(table_info)
         await asyncio.sleep(1.5)
 
 

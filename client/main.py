@@ -2,6 +2,7 @@
 import curses
 import math
 import sys
+import sys
 import asyncio
 from enum import Enum
 
@@ -863,6 +864,11 @@ def on_my_response(data):
     # print('I received a message! ' + str(data))
     MyApp.getForm("MAIN").BoardArea.footer = "I received a message! " + str(data)
     MyApp.getForm("MAIN").display()
+
+
+@sio.on("updated_table_info")
+def on_updated_table_info(data):
+    print(data, file=sys.stderr)
 
 
 def connect_to_server():

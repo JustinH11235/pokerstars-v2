@@ -2,6 +2,7 @@ from typing import List
 from enum import Enum
 import secrets
 from collections import defaultdict
+import json
 
 sys_rand = secrets.SystemRandom()
 
@@ -48,6 +49,16 @@ class PlayerState(Enum):
     ALL_IN = 9
 
     # DISCONNECTED = 10  # should check/fold if time is called
+
+    def encode(self):
+        return str(self)
+
+    @staticmethod
+    def decode(d):
+        name, member = d.split(".")
+        if name != "PlayerState":
+            return None
+        return PlayerState[member]
 
 
 # player states who are in the current hand
@@ -101,6 +112,7 @@ class Deck:
         if len(self.cards) == 0:
             raise ValueError("Deck is empty")
         card = self.cards.pop(0)
+        card.face_up = face_up
         # card.deck_index = self.next_deck_ind
         self.next_deck_ind += 1
         return card
@@ -114,7 +126,17 @@ class Card:
         # self.deck_index = deck_index  # unique per Deck, assigned when dealt
         self.rank = rank
         self.suit = suit
-        self.face_up = False  # if a player chooses to show their card
+        self.face_up = face_up  # if a player chooses to show their card
+
+    def get_view(self, player):
+        if player.sio_id == self.sio_id or self.face_up:
+            return {
+                "rank": self.rank,
+                "suit": self.suit,
+                "face_up": self.face_up,
+            }
+        else:
+            return None
 
 
 """
@@ -129,6 +151,16 @@ class ClientPlayerState(Enum):
     CHOOSE_BET = 1  # also raise, check, etc.
     SELECT_CARDS = 2  # UNUSED - to be used for discarding, etc.
 
+    def encode(self):
+        return str(self)
+
+    @staticmethod
+    def decode(d):
+        name, member = d.split(".")
+        if name != "ClientPlayerState":
+            return None
+        return ClientPlayerState[member]
+
 
 class ClientNextActionType(Enum):
     NO_ACTION = 0
@@ -139,11 +171,37 @@ class ClientNextActionType(Enum):
     # RAISE = 6
     # ALL_IN = 6
 
+    def encode(self):
+        return str(self)
+
+    @staticmethod
+    def decode(d):
+        name, member = d.split(".")
+        if name != "ClientNextActionType":
+            return None
+        return ClientNextActionType[member]
+
 
 class ClientNextAction:
-    def __init__(self, action=ClientNextActionType.NO_ACTION, bet_amount=None):
+    def __init__(
+        self,
+        action,
+        hand_num,
+        action_num,
+        bet_amount=None,
+    ):
+        self.hand_num = hand_num
+        self.action_num = action_num
         self.action: ClientNextActionType = action
         self.bet_amount = bet_amount  # only used for ClientNextActionType.BET
+
+    def get_view(self):
+        return {
+            "hand_num": self.hand_num,
+            "action_num": self.action_num,
+            "action": self.action.encode(),
+            "bet_amount": self.bet_amount,
+        }
 
 
 """
@@ -190,6 +248,21 @@ class ClientPlayerAction:
             next_action  # set when server gets action events from player
         )
 
+    def get_view(self):
+        return {
+            "hand_num": self.hand_num,
+            "action_num": self.action_num,
+            "action": self.action.encode(),
+            "message": self.message,
+            "can_check": self.can_check,
+            # "can_call": self.can_call,
+            "call_amount": self.call_amount,
+            "can_raise": self.can_raise,
+            "bet_instead_of_raise": self.bet_instead_of_raise,
+            "min_raise": self.min_raise,
+            "next_action": self.next_action.get_view(),
+        }
+
 
 class PlayerInfo:
     def __init__(self, name, seat, sio_id):
@@ -210,12 +283,25 @@ class PlayerInfo:
         self.stats = PlayerStats()
         self.is_connected = True
 
-    def get_json(self, viewer_id):
+    def get_view(self, player):
         # if viewer is not myself, do not show my cards,
-        #  unless it's showdown and I have to
+        #  unless they have face_up = True (such as in showdown or if I decide to show)
         # when translating PlayerState, show in terms of ClientPlayerState
+        client_player_action_view = None
+        if self.client_player_action is not None and player.sio_id == self.sio_id:
+            client_player_action_view = self.client_player_action.get_view()
         return {
-            # TODO
+            "name": self.name,
+            "buy_in_amount": self.buy_in_amount,
+            "stack": self.stack,
+            "seat": self.seat,
+            "state": self.state.encode(),
+            "current_bet": self.current_bet,
+            "is_all_in": self.is_all_in,
+            "client_player_action": client_player_action_view,
+            "hole_cards": [card.get_view(player) for card in self.hole_cards],
+            "stats": self.stats.get_view(),
+            "is_connected": self.is_connected,
         }
 
     def get_profit(self):
@@ -251,6 +337,11 @@ class PlayerStats:
         # TODO track vpip, pfr, 3bet %, maybe fold to 3 bet %, etc.
         pass
 
+    def get_view(self):
+        return {
+            # TODO
+        }
+
 
 class Pot:
     def __init__(self):
@@ -258,9 +349,10 @@ class Pot:
         # everyone is eligible for a main pot, only relevant for side pots
         self.players_eligible = []
 
-    def get_json(self):
+    def get_view(self):
         return {
-            # TODO
+            "pot_size": self.pot_size,
+            "players_eligible": [player.sio_id for player in self.players_eligible],
         }
 
 
@@ -294,6 +386,8 @@ class TableInfo:
         # TODO2: keep table history/log of actions
 
     def add_player(self, name, seat, sio_id):
+        if name in [p.name for p in self.players]:
+            return False
         if seat not in self.get_open_seats():
             return False
         self.players.append(PlayerInfo(name, seat, sio_id))
@@ -812,8 +906,17 @@ class TableInfo:
             return False
         return True
 
-    def get_json(self, viewer_id):
+    def get_view(self, player):
         return {
-            # TODO
-            "players": [player.get_json(viewer_id) for player in self.players],
+            "name": self.name,
+            "num_seats": self.num_seats,
+            "sm_blind": self.sm_blind,
+            "bg_blind": self.bg_blind,
+            "hand_num": self.hand_num,
+            "players": [p.get_view(player) for p in self.players],
+            "main_pot": self.main_pot.get_view(),
+            "side_pots": [pot.get_view() for pot in self.side_pots],
+            "community_cards": [card.get_view() for card in self.community_cards],
+            "dealer": self.dealer,
+            "action_on": self.action_on,
         }
