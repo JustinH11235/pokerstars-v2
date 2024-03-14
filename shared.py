@@ -74,7 +74,7 @@ ACTIVE_PLAYER_STATES = [
 ]
 
 # player states who still may need to act
-NOT_ACTED_PLAYER_STATES = [
+MAY_NEED_TO_ACT_PLAYER_STATES = [
     PlayerState.IN_HAND,
     PlayerState.CHECKED,
     PlayerState.CALLED,
@@ -91,6 +91,23 @@ POT_ELIGIBLE_PLAYER_STATES = [
     PlayerState.RAISED,
     PlayerState.ALL_IN,
 ]
+
+
+class Suit(Enum):
+    SPADES = "♠"
+    HEARTS = "♥"
+    DIAMONDS = "♦"
+    CLUBS = "♣"
+
+    def encode(self):
+        return str(self)
+
+    @staticmethod
+    def decode(d):
+        name, member = d.split(".")
+        if name != "Suit":
+            return None
+        return Suit[member]
 
 
 """
@@ -114,7 +131,7 @@ class Deck:
         card = self.cards.pop(0)
         card.face_up = face_up
         # card.deck_index = self.next_deck_ind
-        self.next_deck_ind += 1
+        # self.next_deck_ind += 1
         return card
 
     def remaining_cards(self):
@@ -122,17 +139,44 @@ class Deck:
 
 
 class Card:
+    RANK_MAP = {
+        0: "2",
+        1: "3",
+        2: "4",
+        3: "5",
+        4: "6",
+        5: "7",
+        6: "8",
+        7: "9",
+        8: "10",
+        9: "J",
+        10: "Q",
+        11: "K",
+        12: "A",
+    }
+    SUIT_MAP = {
+        0: Suit.SPADES,
+        1: Suit.HEARTS,
+        2: Suit.DIAMONDS,
+        3: Suit.SPADES,
+    }
+
     def __init__(self, rank, suit, face_up=False):
         # self.deck_index = deck_index  # unique per Deck, assigned when dealt
         self.rank = rank
         self.suit = suit
         self.face_up = face_up  # if a player chooses to show their card
 
-    def get_view(self, player):
-        if player.sio_id == self.sio_id or self.face_up:
+    def get_view(self, is_players_cards):
+        if is_players_cards or self.face_up:
+            rank = self.RANK_MAP[self.rank]
+            suit = self.SUIT_MAP[self.suit]
+            print(
+                f"rank: {rank}, suit: {suit.encode()} self.rank: {self.rank}, self.suit: {self.suit}"
+            )
             return {
-                "rank": self.rank,
-                "suit": self.suit,
+                "rank": rank,
+                "suit": suit.encode(),
                 "face_up": self.face_up,
             }
         else:
@@ -163,7 +207,7 @@ class ClientPlayerState(Enum):
 
 
 class ClientNextActionType(Enum):
-    NO_ACTION = 0
+    # NO_ACTION = 0
     FOLD = 1
     CHECK = 2
     CALL = 3
@@ -249,6 +293,9 @@ class ClientPlayerAction:
         )
 
     def get_view(self):
+        next_action_view = None
+        if self.next_action is not None:
+            next_action_view = self.next_action.get_view()
         return {
             "hand_num": self.hand_num,
             "action_num": self.action_num,
@@ -260,7 +307,7 @@ class ClientPlayerAction:
             "can_raise": self.can_raise,
             "bet_instead_of_raise": self.bet_instead_of_raise,
             "min_raise": self.min_raise,
-            "next_action": self.next_action.get_view(),
+            "next_action": next_action_view,
         }
 
 
@@ -290,6 +337,7 @@ class PlayerInfo:
         client_player_action_view = None
         if self.client_player_action is not None and player.sio_id == self.sio_id:
             client_player_action_view = self.client_player_action.get_view()
+        player_is_viewer = player.sio_id == self.sio_id
         return {
             "name": self.name,
             "buy_in_amount": self.buy_in_amount,
@@ -299,9 +347,10 @@ class PlayerInfo:
             "current_bet": self.current_bet,
             "is_all_in": self.is_all_in,
             "client_player_action": client_player_action_view,
-            "hole_cards": [card.get_view(player) for card in self.hole_cards],
+            "hole_cards": [card.get_view(player_is_viewer) for card in self.hole_cards],
             "stats": self.stats.get_view(),
             "is_connected": self.is_connected,
+            "is_player": player_is_viewer,
         }
 
     def get_profit(self):
@@ -426,7 +475,7 @@ class TableInfo:
             seat = (start_seat + i) % self.num_seats
             if (
                 self.get_player_at_seat(seat) is not None
-                and self.get_player_at_seat(seat).state not in filter
+                and self.get_player_at_seat(seat).state in filter
             ):
                 return seat
         return None
@@ -440,12 +489,16 @@ class TableInfo:
         return self.get_num_active_players() == 2
 
     def get_small_blind_seat(self) -> int:
+        if self.dealer is None:
+            return None
         if self.is_heads_up():
             return self.dealer
         else:
             return self.get_next_seat(self.dealer, ACTIVE_PLAYER_STATES)
 
     def get_big_blind_seat(self) -> int:
+        if self.dealer is None:
+            return None
         if self.is_heads_up():
             return self.get_next_seat(self.get_small_blind_seat(), ACTIVE_PLAYER_STATES)
         else:
@@ -515,7 +568,7 @@ class TableInfo:
 
     def perform_next_player_action(self):
         p: PlayerInfo = self.get_player_at_seat(self.action_on)
-        if p.client_player_action is None:
+        if p.client_player_action is None or p.client_player_action.next_action is None:
             return
 
         if p.client_player_action.next_action.action == ClientNextActionType.FOLD:
@@ -593,12 +646,29 @@ class TableInfo:
                                 p.client_player_action = None
         # elif p.client_player_action.next_action.action == ClientNextActionType.ALL_IN:
         #     pass
-        elif (
-            p.client_player_action.next_action.action == ClientNextActionType.NO_ACTION
-        ):
-            pass
         else:
             raise ValueError("Invalid action")
+
+    def initialize_client_player_action(self, player):
+        can_check = player.current_bet == self.latest_bet
+        call_amount = min(self.latest_bet, player.stack)
+        can_raise = (
+            player.stack > self.latest_bet
+            and player.last_full_raise_responded_to != self.latest_full_raise
+        )
+        bet_instead_of_raise = self.latest_bet == 0
+        min_raise = self.min_raise
+        player.client_player_action = ClientPlayerAction(
+            hand_num=self.hand_num,
+            action_num=self.action_num,
+            action=ClientPlayerState.CHOOSE_BET,
+            can_check=can_check,
+            call_amount=call_amount,
+            can_raise=can_raise,
+            bet_instead_of_raise=bet_instead_of_raise,
+            min_raise=min_raise,
+            next_action=None,
+        )
 
     """
     Stays at current player if they're not done, otherwise goes to next player who needs to act
@@ -606,36 +676,24 @@ class TableInfo:
 
     def goToNextActionOnIfDone(self):
         if self.player_needs_to_act(self.get_player_at_seat(self.action_on)):
-            return self.action_on
+            p = self.get_player_at_seat(self.action_on)
+            if p.client_player_action is None:
+                self.initialize_client_player_action(p)
+            return False
 
         self.get_player_at_seat(self.action_on).client_player_action = None
         self.action_num += 1
-        self.action_on = self.get_next_seat(self.action_on, NOT_ACTED_PLAYER_STATES)
+        self.action_on = self.get_next_seat(
+            self.action_on, MAY_NEED_TO_ACT_PLAYER_STATES
+        )
         # if not self.player_needs_to_act(self.get_player_at_seat(self.action_on)):
         #     return None
         # set their client_player_action (allows incoming next actions to come in)
         p = self.get_player_at_seat(self.action_on)
         # assert p.client_player_action is None
-        if p.client_player_action is None:
-            can_check = p.current_bet == self.latest_bet
-            call_amount = min(self.latest_bet, p.stack)
-            can_raise = (
-                p.stack > self.latest_bet
-                and p.last_full_raise_responded_to != self.latest_full_raise
-            )
-            bet_instead_of_raise = self.latest_bet == 0
-            min_raise = self.min_raise
-            p.client_player_action = ClientPlayerAction(
-                hand_num=self.hand_num,
-                action_num=self.action_num,
-                action=ClientPlayerState.CHOOSE_BET,
-                can_check=can_check,
-                call_amount=call_amount,
-                can_raise=can_raise,
-                bet_instead_of_raise=bet_instead_of_raise,
-                min_raise=min_raise,
-                next_action=ClientNextAction(),
-            )
+        if self.player_needs_to_act(p) and p.client_player_action is None:
+            self.initialize_client_player_action(p)
+        return True
 
     def update_pots(self):
         # split pot into side pots for all-ins
@@ -907,16 +965,22 @@ class TableInfo:
         return True
 
     def get_view(self, player):
+        main_pot_including_bets = self.main_pot.pot_size + sum(
+            p.current_bet for p in self.players
+        )
         return {
             "name": self.name,
             "num_seats": self.num_seats,
             "sm_blind": self.sm_blind,
             "bg_blind": self.bg_blind,
+            "big_blind_seat": self.get_big_blind_seat(),
+            "small_blind_seat": self.get_small_blind_seat(),
             "hand_num": self.hand_num,
             "players": [p.get_view(player) for p in self.players],
             "main_pot": self.main_pot.get_view(),
+            "main_pot_including_bets": main_pot_including_bets,
             "side_pots": [pot.get_view() for pot in self.side_pots],
-            "community_cards": [card.get_view() for card in self.community_cards],
+            "community_cards": [card.get_view(player) for card in self.community_cards],
             "dealer": self.dealer,
             "action_on": self.action_on,
         }

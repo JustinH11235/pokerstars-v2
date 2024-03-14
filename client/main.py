@@ -2,9 +2,18 @@
 import curses
 import math
 import sys
-import sys
+import os
 import asyncio
 from enum import Enum
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from shared import (
+    Suit,
+    ClientPlayerAction,
+    ClientNextActionType,
+    ClientNextAction,
+    ClientPlayerState,
+)
 
 import socketio
 import npyscreen
@@ -19,6 +28,7 @@ BLACK_WITH_BACKGROUND = "CURSOR_INVERSE"
 GREEN_WITH_BACKGROUND = "VERYGOOD"
 YELLOW_WITH_BACKGROUND = "CAUTIONHL"
 BLUE_WITH_BACKGROUND = "BLUE_WHITE"
+ACTION_ON_COLOR = "CAUTIONHL"
 # 'DEFAULT'     : 'WHITE_BLACK',
 # 'FORMDEFAULT' : 'WHITE_BLACK',
 # 'NO_EDIT'     : 'BLUE_BLACK',
@@ -45,21 +55,15 @@ SPADE = "\u2660"
 CLUB = "\u2663"
 
 
-class Suit(Enum):
-    SPADES = "♠"
-    HEARTS = "♥"
-    DIAMONDS = "♦"
-    CLUBS = "♣"
-
-    def color(self):
-        if self == Suit.SPADES:
-            return BLACK
-        elif self == Suit.HEARTS:
-            return RED
-        elif self == Suit.DIAMONDS:
-            return BLUE
-        elif self == Suit.CLUBS:
-            return GREEN
+def color_of(suit: Suit):
+    if suit == Suit.SPADES:
+        return BLACK
+    elif suit == Suit.HEARTS:
+        return RED
+    elif suit == Suit.DIAMONDS:
+        return BLUE
+    elif suit == Suit.CLUBS:
+        return GREEN
 
 
 class App(npyscreen.NPSAppManaged):
@@ -103,11 +107,20 @@ class NewMultiLineEdit(npyscreen.MultiLineEdit):
         )
 
 
+class SeatBox(npyscreen.BoxTitle):
+    _contained_widget = NewMultiLineEdit
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
 class BetBox(npyscreen.BoxTitle):
     _contained_widget = NewMultiLineEdit
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.min_raise = None
+        # TODO gray out if not valid raise/bet
         # self.parent.HoleCards.value = "init"
         # self.parent.HoleCards.display()
 
@@ -320,7 +333,8 @@ class LargeCard:
         self.card_width = card_width
         self.card_height = card_height
 
-        color = self.suit.color()
+        color = color_of(self.suit)
+        # print(f"color {color}", file=sys.stderr)
         self.card_widget = form_ref.add(
             CardTest,
             name=self.suit.value,
@@ -345,7 +359,7 @@ class LargeCard:
 
     def set_suit(self, suit):
         self.suit = suit
-        color = self.suit.color()
+        color = color_of(self.suit)
         self.card_widget.set_suit(suit)
         self.card_widget.set_color(color)
 
@@ -447,7 +461,7 @@ class CardsContainer(npyscreen.BoxTitle):
         super().__init__(*args, **kwargs)
         self.hidden = True
 
-        print(kwargs, file=sys.stderr)
+        # print(kwargs, file=sys.stderr)
         # TODO pass this in from server or None if server doesn't know
         self.MAX_CARDS = kwargs["max_cards"]  # 5
         self.LARGE_CARD_WIDTH = kwargs["large_card_width"]
@@ -486,7 +500,11 @@ class CardsContainer(npyscreen.BoxTitle):
             0, (middle - math.ceil(total_cards_width / 2))
         )  # TODO CENTER
         for i in range(len(self.cards_info)):
-            c = self.large_card_pool.get_card(Suit.HEARTS, "A")  # TODO pass card info
+            # print(f"card {self.cards_info}", file=sys.stderr)
+            rank = self.cards_info[i]["rank"]
+            suit = Suit.decode(self.cards_info[i]["suit"])
+            # ignore face_up for now until we allow users to show cards
+            c = self.large_card_pool.get_card(suit, rank)
             card_x = starting_x + i * (self.LARGE_CARD_WIDTH + 1)
             card_y = self.rely + (self.height - self.LARGE_CARD_HEIGHT) // 2
             c.move_card_abs(card_x, card_y)
@@ -500,8 +518,10 @@ class CardsContainer(npyscreen.BoxTitle):
         )
         text = ""
         for i in range(len(self.cards_info)):
-            text += "A♠️"
-        for i in range(max_cards - len(self.cards_info)):
+            rank = self.cards_info[i]["rank"]
+            suit = Suit.decode(self.cards_info[i]["suit"])
+            text += f"{rank}{suit.value}"
+        for _ in range(max_cards - len(self.cards_info)):
             # placeholder
             # TODO make each card its own FixedText to have different colors
             text += "  "
@@ -535,7 +555,7 @@ class MainForm(npyscreen.FormWithMenus):
     def create(self):
         self.ind = 0
         self.keypress_timeout = 1
-        self.num_seats = 3  # maybe have this "hardcoded" game creation screen
+        # self.num_seats = 4  # TODO2 maybe have this "hardcoded" game creation screen
         self.max_community_cards = 5  # have this hardcoded also from server
         self.max_hole_cards = 2  # have this hardcoded also from server
 
@@ -600,10 +620,10 @@ class MainForm(npyscreen.FormWithMenus):
         )
         LARGE_CARD_WIDTH = 11
         LARGE_CARD_HEIGHT = 8
-        print(
-            f" hole cards container relx {self.HoleCards.relx} rely {self.HoleCards.rely} width {self.HoleCards.width -2} height {self.HoleCards.height -2 }",
-            file=sys.stderr,
-        )
+        # print(
+        #     f" hole cards container relx {self.HoleCards.relx} rely {self.HoleCards.rely} width {self.HoleCards.width -2} height {self.HoleCards.height -2 }",
+        #     file=sys.stderr,
+        # )
         self.hole_cards_container = self.add(
             CardsContainer,
             large_card_width=LARGE_CARD_WIDTH,
@@ -617,7 +637,7 @@ class MainForm(npyscreen.FormWithMenus):
             height=self.HoleCards.height - 2,
             max_cards=self.max_hole_cards,
         )
-        self.hole_cards_container.set_cards([0, 0])  # TODO pass in card data
+        self.hole_cards_container.set_cards([])  # TODO pass in card data
 
         player_width = 20
         player_height = 5
@@ -633,16 +653,16 @@ class MainForm(npyscreen.FormWithMenus):
             self.BoardArea.height * 2 - 4 - math.ceil(player_height / 2 * 2 * 2)
         ) // 2
         e = Ellipse(seat_circle_radius_x, seat_circle_radius_y)
-        seat_positions = e.get_n_arc_length_equidistant_pts(self.num_seats)
+        seat_positions = e.get_n_arc_length_equidistant_pts(num_seats)
         seat = 1
         for delta_x, delta_y in seat_positions:
             player_x = math.ceil(centerx + (delta_x))
             player_y = int(centery + (-delta_y / 2))
             self.SeatBoxes.append(
                 self.add(
-                    BetBox,
+                    SeatBox,
                     editable=False,
-                    name=f"Seat {seat} {chr(0x24B9)}",
+                    name=f"",
                     height=player_height,
                     width=player_width,
                     relx=player_x,
@@ -684,13 +704,13 @@ class MainForm(npyscreen.FormWithMenus):
             right_large = test_right
         possible_large_card_width = right_large - left_large + 1
         if possible_large_card_width >= self.max_community_cards * LARGE_CARD_WIDTH:
-            print("large enough", file=sys.stderr)
+            # print("large enough", file=sys.stderr)
             community_card_width = possible_large_card_width
             community_card_height = LARGE_CARD_HEIGHT
             community_card_relx = left_large
             community_card_rely = top_large
         else:
-            print("not large enough", file=sys.stderr)
+            # print("not large enough", file=sys.stderr)
             middle_y = self.BoardArea.rely + (self.BoardArea.height // 2)
             top_large = middle_y
             bottom_large = middle_y
@@ -718,10 +738,10 @@ class MainForm(npyscreen.FormWithMenus):
             community_card_height = 1
             community_card_relx = left_large
             community_card_rely = right_large
-        print(
-            f"relx {community_card_relx} rely {community_card_rely} width {community_card_width} height {community_card_height}",
-            file=sys.stderr,
-        )
+        # print(
+        #     f"relx {community_card_relx} rely {community_card_rely} width {community_card_width} height {community_card_height}",
+        #     file=sys.stderr,
+        # )
         self.community_cards_container = self.add(
             CardsContainer,
             editable=False,
@@ -733,9 +753,9 @@ class MainForm(npyscreen.FormWithMenus):
             width=community_card_width,
             height=community_card_height,
         )
-        self.community_cards_container.set_cards(
-            [0, 0, 0, 0, 0]
-        )  # TODO pass in card data
+        # self.community_cards_container.set_cards(
+        #     [0, 0, 0, 0, 0]
+        # )  # TODO pass in card data
         # TODO pot and sidepots (if not enough room,
         #  put cards in middle and sidepot on footer)
 
@@ -881,13 +901,76 @@ def on_my_response(data):
     MyApp.getForm("MAIN").display()
 
 
+num_seats = 4  # TODO2 maybe have this "hardcoded" game creation screen
+client_player_action = None
+my_seat = None
+
+
+def seatbox_ind_from_seat(seat):
+    if my_seat is not None:
+        return ((seat - my_seat) + num_seats) % num_seats
+    else:
+        return seat
+
+
 @sio.on("updated_table_info")
 def on_updated_table_info(data):
+    global client_player_action
+    global my_seat
     # print(data, file=sys.stderr)
-    MyApp.getForm("MAIN").name = data["name"]
-    MyApp.getForm("MAIN").num_seats = str(data["num_seats"])
-    # MyApp.getForm("MAIN").BoardArea.footer = "I received a message! " + str(data)
-    MyApp.getForm("MAIN").display()
+    form = MyApp.getForm("MAIN")
+
+    for seat in range(len(form.SeatBoxes)):
+        # reset seat
+        form.SeatBoxes[seat].name = ""
+        form.SeatBoxes[seat]._my_widgets[0].value = ""
+        form.SeatBoxes[seat].color = "DEFAULT"
+
+    form.name = f'{data["name"]} ({data["sm_blind"]}/{data["bg_blind"]})'
+    form.num_seats = str(data["num_seats"])
+    # ignore hand_num
+
+    if len(data["side_pots"]) > 0:
+        form.BoardArea.footer = f'Pot: {data["main_pot_including_bets"]} ⛁; Sidepots: {"⛁, ".join(d["pot_size"] for d in data["side_pots"])}'
+    else:
+        form.BoardArea.footer = f'Pot: {data["main_pot_including_bets"]} ⛁'  # \u26C3
+
+    form.community_cards_container.set_cards(data["community_cards"])
+
+    for player in data["players"]:
+        if player["is_player"]:
+            my_seat = player["seat"]
+            form.hole_cards_container.set_cards(player["hole_cards"])
+            if player["client_player_action"] is not None:
+                form.BetBox.hidden = False
+                client_player_action = player["client_player_action"]
+                form.BetBox.min_raise = client_player_action["min_raise"]
+                if form.BetBox.value == "":
+                    form.BetBox.value = str(client_player_action["min_raise"])
+                if client_player_action["bet_instead_of_raise"]:
+                    form.BetBox.name = "Bet"
+                else:
+                    form.BetBox.name = "Raise"
+            else:
+                # don't have any action
+                form.BetBox.hidden = True
+        seat = player["seat"]
+        seat_name = f"{player['name']}"
+        if data["dealer"] == seat:
+            seat_name += f" {chr(0x24B9)}"
+        form.SeatBoxes[seatbox_ind_from_seat(seat)].name = seat_name
+        inside_box_text = [
+            f"Stack: {player['stack']} ⛁",
+            f"Bet: {player['current_bet']} ⛁",
+        ]
+        form.SeatBoxes[seatbox_ind_from_seat(seat)]._my_widgets[0].value = "\n\n".join(
+            inside_box_text
+        )
+
+    if data["action_on"] is not None:
+        form.SeatBoxes[seatbox_ind_from_seat(data["action_on"])].color = ACTION_ON_COLOR
+
+    form.display()
 
 
 def connect_to_server():

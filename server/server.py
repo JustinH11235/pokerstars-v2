@@ -47,8 +47,9 @@ async def disconnect(sid):
     print("disconnect ", sid)
     if table_info is not None:
         p = table_info.get_player_by_sio_id(sid)
-        p.is_connected = False
-        # player will get set to sitting out at the end of the round (or if they take long enough to act)
+        if p is not None:
+            p.is_connected = False
+            # player will get set to sitting out at the end of the round (or if they take long enough to act)
 
 
 @sio.on("my_event")
@@ -124,6 +125,12 @@ async def update_state_from_actions(table_info: TableInfo):
             if not player.is_connected:
                 table_info.players.remove(player)
         # set people's states to IN_HAND
+        for player in table_info.players:
+            if player.state not in [
+                PlayerState.SITTING_OUT,
+                PlayerState.NOT_SEATED,
+            ]:
+                player.state = PlayerState.IN_HAND
         if table_info.get_num_active_players() >= 2:
             # move dealer, here because we need to wait to know who's in the hand to move the dealer
             if table_info.dealer is None:
@@ -153,6 +160,8 @@ async def update_state_from_actions(table_info: TableInfo):
             )
             table_info.process_actions_next_state = None
     elif table_info.game_state == GameState.PREFLOP:
+        # TODO temp
+        table_info.add_n_cards_to_board(3)
         # set action on
         table_info.action_on = table_info.get_first_to_act_preflop()
         # loop until everyone has acted
