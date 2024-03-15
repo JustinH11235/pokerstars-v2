@@ -94,6 +94,17 @@ POT_ELIGIBLE_PLAYER_STATES = [
     PlayerState.ALL_IN,
 ]
 
+ELIGIBLE_TO_PLAY_PLAYER_STATES = [
+    PlayerState.IN_HAND,
+    PlayerState.FOLDED,
+    PlayerState.CHECKED,
+    PlayerState.CALLED,
+    PlayerState.BET,
+    PlayerState.RAISED,
+    PlayerState.ALL_IN,
+    PlayerState.NOT_IN_HAND,
+]
+
 
 class Suit(Enum):
     SPADES = "♠"
@@ -518,6 +529,7 @@ class TableInfo:
             return self.get_next_seat(self.dealer, ACTIVE_PLAYER_STATES)
 
     def pay_blinds(self):
+        print(f"dealer: {self.dealer}")
         small_blind_seat = self.get_small_blind_seat()
         print(f"small_blind_seat: {small_blind_seat}")
         big_blind_seat = self.get_big_blind_seat()
@@ -570,7 +582,7 @@ class TableInfo:
         self.min_raise = None
         self.hand_start_time = time.time()
         for player in self.players:
-            if player.state in ACTIVE_PLAYER_STATES:
+            if player.state in ELIGIBLE_TO_PLAY_PLAYER_STATES:
                 player.state = PlayerState.IN_HAND
                 player.current_bet = 0
                 player.last_full_raise_responded_to = None
@@ -585,8 +597,7 @@ class TableInfo:
         self.latest_full_raise = 0
         self.min_raise = self.bg_blind
         for player in self.players:
-            if player.state in ACTIVE_PLAYER_STATES:
-                # TODO dont unfold people
+            if player.state in MAY_NEED_TO_ACT_PLAYER_STATES:
                 player.state = PlayerState.IN_HAND
                 player.current_bet = 0
                 player.last_full_raise_responded_to = None

@@ -120,6 +120,7 @@ class BetBox(npyscreen.BoxTitle):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.min_raise = None
+        self.stack = None
         # TODO gray out if not valid raise/bet
         # self.parent.HoleCards.value = "init"
         # self.parent.HoleCards.display()
@@ -153,7 +154,11 @@ class BetBox(npyscreen.BoxTitle):
             if (
                 the_bet.isdigit()
                 and int(the_bet) > 0
-                and (self.min_raise is None or int(the_bet) >= self.min_raise)
+                and (
+                    self.min_raise is None
+                    or int(the_bet) >= self.min_raise
+                    or (self.stack is not None and int(the_bet) == self.stack)
+                )
             ):
                 the_bet = int(the_bet)
                 sio.emit(
@@ -959,6 +964,7 @@ def on_updated_table_info(data):
                 if client_player_action["can_raise"]:
                     form.BetBox.hidden = False
                     form.BetBox.min_raise = client_player_action["min_raise"]
+                    form.BetBox.stack = player["stack"] + player["current_bet"]
                     if form.BetBox.value == "":
                         form.BetBox.value = str(client_player_action["min_raise"])
                     if client_player_action["bet_instead_of_raise"]:
@@ -980,6 +986,7 @@ def on_updated_table_info(data):
             else:
                 # don't have any action
                 form.BetBox.min_raise = None
+                form.BetBox.stack = None
                 form.BetBox.value = ""
                 form.BetBox.hidden = True
                 form.CheckButton.hidden = True

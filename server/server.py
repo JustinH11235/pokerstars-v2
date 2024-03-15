@@ -137,13 +137,13 @@ async def update_state_from_actions(table_info: TableInfo):
     ):  # not used atm, but will after we add a Start Game button
         # if table_info.get_num_active_players() >= 2:
         table_info.game_state = GameState.BEFORE_HAND
-        # set playerState to IN_HAND for all active players
-        for player in table_info.players:
-            if player.state not in [
-                PlayerState.SITTING_OUT,
-                PlayerState.NOT_SEATED,
-            ]:
-                player.state = PlayerState.IN_HAND
+        # # set playerState to IN_HAND for all active players
+        # for player in table_info.players:
+        #     if player.state not in [
+        #         PlayerState.SITTING_OUT,
+        #         PlayerState.NOT_SEATED,
+        #     ]:
+        #         player.state = PlayerState.IN_HAND
     elif table_info.game_state == GameState.BEFORE_HAND:
         # reset state for new hand
         table_info.new_hand_reset_state()
@@ -156,13 +156,13 @@ async def update_state_from_actions(table_info: TableInfo):
         for player in table_info.players:
             if player.stack == 0:
                 player.buy_in(10_000)
-        # set people's states to IN_HAND
-        for player in table_info.players:
-            if player.state not in [
-                PlayerState.SITTING_OUT,
-                PlayerState.NOT_SEATED,
-            ]:
-                player.state = PlayerState.IN_HAND
+        # # set people's states to IN_HAND
+        # for player in table_info.players:
+        #     if player.state not in [
+        #         PlayerState.SITTING_OUT,
+        #         PlayerState.NOT_SEATED,
+        #     ]:
+        #         player.state = PlayerState.IN_HAND
         if table_info.get_num_active_players() >= 2:
             # move dealer, here because we need to wait to know who's in the hand to move the dealer
             if table_info.dealer is None:
@@ -265,12 +265,12 @@ async def update_state_from_actions(table_info: TableInfo):
         table_info.distribute_pots_to_winners()
         # handle sit outs/sit ins/disconnects (actually just do in start hand)
         # set playerState to IN_HAND for all active players (maybe do this in before hand also)
-        for player in table_info.players:
-            if player.state not in [
-                PlayerState.SITTING_OUT,
-                PlayerState.NOT_SEATED,
-            ]:
-                player.state = PlayerState.IN_HAND
+        # for player in table_info.players:
+        #     if player.state not in [
+        #         PlayerState.SITTING_OUT,
+        #         PlayerState.NOT_SEATED,
+        #     ]:
+        #         player.state = PlayerState.IN_HAND
         table_info.hand_num += 1
         table_info.action_num = 0
         table_info.game_state = GameState.BEFORE_HAND

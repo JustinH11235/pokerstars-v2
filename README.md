@@ -3,10 +3,12 @@
 ## Client Installation Instructions
 
 - Install Python 3.9.18 (any Python 3.9.x should work though)
+    - Python 3.10.6 worked on Windows
 - Install the Python dependencies needed:
     - Find the file path to the client/requirements.txt file (e.g. `C:\Users\username\Downloads\pokerstars-v2\client\requirements.txt`)
     - In your terminal, run the command `pip install -r C:\Users\username\Downloads\pokerstars-v2\client\requirements.txt`
         - You may need to use pip3 instead of pip
+        - If not on Windows, you should comment out `windows-curses` and `requests` in the requirements.txt file, since these are only needed for Windows.
     - If you can't find the requirements.txt file, you can directly install the dependencies with `pip install art==6.1` then `pip install npyscreen==4.10.5` then `pip install python-socketio==5.11.1`
         - You can also try without the version numbers if it can't install any of those three.
 - Run the client!
