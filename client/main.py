@@ -3,7 +3,6 @@ import curses
 import math
 import sys
 import os
-import asyncio
 from enum import Enum
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -888,9 +887,6 @@ TODO:
 sio = socketio.Client()
 MyApp = App()
 
-# create data structure storing TableInfo and PlayerInfo & CardInfo,
-#  pass these structures around, setup client as sio async client
-
 
 @sio.event
 def connect():
@@ -1027,27 +1023,14 @@ def on_updated_table_info(data):
 
 def connect_to_server():
     port = 8000
-    # address = "146.235.214.149"  # TODO take in address/port on cmdline
-    address = "localhost"
+    if len(sys.argv) >= 2:
+        address = sys.argv[1]
+    else:
+        address = "localhost"
     sio.connect(f"http://{address}:{port}")
-    # await sio.wait()
-    # ind = 0
-    # while True:
-    #     # send 'on_my_event' to server
-    #     print('sending event ' + str(ind))
-    #     await sio.emit('my_event', {'data': ind})
-    #     print('sent')
-    #     ind += 1
-    #     await asyncio.sleep(1)
 
 
 if __name__ == "__main__":
-    # loop = asyncio.get_event_loop()
-    # loop.run_until_complete(connect_to_server())
     connect_to_server()
     print("connected.")
     MyApp.run()
-
-
-# MyApp = App()
-# MyApp.run()

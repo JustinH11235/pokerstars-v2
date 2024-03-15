@@ -57,7 +57,6 @@ async def disconnect(sid):
 @sio.on("my_event")
 async def on_my_event(sid, data):
     print("got my_event " + str(data["data"]))
-    # await self.emit('my_response', data)
 
 
 @sio.on("player_bet")
@@ -117,37 +116,6 @@ async def on_player_called(sid, data):
             )
 
 
-# async def poker():
-#     print("Start of main()")
-#     x = 0
-#     # print("In main()")
-#     while True:
-#         print("starting to calculate x")
-#         for i in range(10**8 // 3):
-#             x += 1
-#             # asyncio.slee
-#             # await asyncio.sleep(10)
-#             pass
-#         print(" x = ", x)
-#         await asyncio.sleep(5)
-
-
-# async def test_sending():
-#     ind = 0
-#     while True:
-#         await sio.emit("my_response", ind)
-#         print("sent my_response " + str(ind))
-#         ind += 1
-#         await asyncio.sleep(0.5)
-
-
-# def get_sio_player_by_sio_id(sio_id):
-#     for player in sio_players:
-#         if player["sio_id"] == sio_id:
-#             return player
-#     return None
-
-
 """
 We don't want to change state in the middle of a loop 
 iteration. If we get an unexpected event, ignore it.
@@ -161,7 +129,6 @@ NUM_SEATS = 4
 SM_BLIND = 50
 BG_BLIND = 100
 TABLE_NAME = "Test Table 1"
-# sio_players = []
 
 
 async def update_state_from_actions(table_info: TableInfo):
@@ -342,21 +309,14 @@ async def game_loop():
 
 
 async def main():
-    # start printing app
-    # asyncio.create_task(poker())
     asyncio.create_task(game_loop())
-    # loop.create_task(test_sending())
 
     # start uvicorn server
     config = uvicorn.Config(app, host=address, port=port)
     server = uvicorn.Server(config)
     await server.serve()
-    print("Server shut down somehow.")
+    print("Server shut down.")
 
 
 if __name__ == "__main__":
-    # uvicorn.run(app, host=address, port=port)
-    # wait 5 seconds
     asyncio.run(main())
-    # loop = asyncio.get_event_loop()
-    # loop.run_until_complete(main(loop))
