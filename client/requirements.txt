@@ -1,3 +1,5 @@
 art==6.1
 npyscreen==4.10.5
 python-socketio==5.11.1
+windows-curses
+requests

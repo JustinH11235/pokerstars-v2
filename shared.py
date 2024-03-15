@@ -160,7 +160,7 @@ class Card:
         0: Suit.SPADES,
         1: Suit.HEARTS,
         2: Suit.DIAMONDS,
-        3: Suit.SPADES,
+        3: Suit.CLUBS,
     }
 
     def __init__(self, rank, suit, face_up=False):
@@ -586,6 +586,7 @@ class TableInfo:
         self.min_raise = self.bg_blind
         for player in self.players:
             if player.state in ACTIVE_PLAYER_STATES:
+                # TODO dont unfold people
                 player.state = PlayerState.IN_HAND
                 player.current_bet = 0
                 player.last_full_raise_responded_to = None
@@ -996,6 +997,7 @@ class TableInfo:
      Goes to End Hand if there's only 1 person left. Otherwise goes to next_state."""
 
     def go_to_showdown_or_end_hand_else(self, next_state):
+        # TODO if folds to BB, BB is allowed to check
         if self.get_num_players(POT_ELIGIBLE_PLAYER_STATES) == 1:
             self.game_state = GameState.END_HAND
         elif (

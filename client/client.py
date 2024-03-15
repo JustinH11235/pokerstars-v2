@@ -890,18 +890,21 @@ MyApp = App()
 
 @sio.event
 def connect():
-    print(sio.transport, sio.sid)
-    print("I'm connected!")
+    # print(sio.transport, sio.sid)
+    # print("I'm connected!")
+    pass
 
 
 @sio.event
 def connect_error(data):
-    print("The connection failed! " + str(data))
+    # print("The connection failed! " + str(data))
+    pass
 
 
 @sio.event
 def disconnect():
-    print("I'm disconnected!")
+    # print("I'm disconnected!")
+    pass
 
 
 @sio.on("my_response")
@@ -968,7 +971,9 @@ def on_updated_table_info(data):
                 form.CheckButton.hidden = not client_player_action["can_check"]
                 form.CallButton.hidden = not client_player_action["can_call"]
                 form.FoldButton.hidden = False
-                if form._widgets__[form.editw].hidden:
+                if form._widgets__[form.editw].hidden and hasattr(
+                    form._widgets__[form.editw], "entry_widget"
+                ):
                     form._widgets__[form.editw].entry_widget.h_exit_right(None)
                 if client_player_action["can_call"]:
                     form.CallButton.name = f"{client_player_action['call_amount']}"
