@@ -1172,7 +1172,10 @@ def on_updated_table_info(data):
     else:
         form.BoardArea.footer = f'Pot: {data["main_pot_including_bets"]} ⛁'  # \u26C3
 
-    if data["community_cards"] != form.community_cards_container.cards_info:
+    if (
+        data["community_cards"] != form.community_cards_container.cards_info
+        and data["community_cards"] != []
+    ):
         play_new_card_sound()
     form.community_cards_container.set_cards(data["community_cards"])
 
@@ -1182,7 +1185,10 @@ def on_updated_table_info(data):
         seat = player["seat"]
         if player["is_player"]:
             my_seat = player["seat"]
-            if player["hole_cards"] != form.hole_cards_container.cards_info:
+            if (
+                player["hole_cards"] != form.hole_cards_container.cards_info
+                and player["hole_cards"] != []
+            ):
                 play_new_card_sound()
             form.hole_cards_container.set_cards(player["hole_cards"])
             if player["client_player_action"] is not None:
@@ -1278,6 +1284,9 @@ def on_updated_table_info(data):
 
 def connect_to_server():
     auto_update = "--no-auto-update" not in sys.argv
+    # remove --no-auto-update from sys.argv
+    if "--no-auto-update" in sys.argv:
+        sys.argv.remove("--no-auto-update")
     if auto_update:
         if get_latest_version():
             print("Updated to latest version, please try again.")
