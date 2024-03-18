@@ -63,7 +63,7 @@ def play_new_action_sound():
 
 def play_new_card_sound():
     # trash-empty works well for cards being placed
-    ret = play_sound_by_name(["trash-empty"])
+    ret = play_sound_by_name(["trash"])
     # if ret is None:
     #     # fallback for non-linux/ubuntu
     #     curses.beep()
@@ -1128,6 +1128,8 @@ def on_updated_table_info(data):
         seat = player["seat"]
         if player["is_player"]:
             my_seat = player["seat"]
+            if player["hole_cards"] != form.hole_cards_container.cards_info:
+                play_new_card_sound()
             form.hole_cards_container.set_cards(player["hole_cards"])
             if player["client_player_action"] is not None:
                 if client_player_action is None:
