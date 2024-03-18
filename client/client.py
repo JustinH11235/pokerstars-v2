@@ -71,16 +71,7 @@ class App(npyscreen.NPSAppManaged):
         self.addForm("MAIN", MainForm, name="PokerStars V2")
 
 
-class HoleCards(npyscreen.BoxTitle):
-    # _contained_widget = npyscreen.MultiLineEdit
-
-    # def handle_mouse_event(self, mouse_event):
-    #     mouse_id, x, y, z, bstate = mouse_event  # see note below.
-    #     if bstate == curses.BUTTON1_PRESSED:
-    #         self.when_value_edited()
-
-    # def when_value_edited(self):
-    #     self.parent.parentApp.queue_event(npyscreen.Event("event_value_edited"))
+class HoleCards(npyscreen.BoxBasic):
     pass
 
 
@@ -303,6 +294,10 @@ class CardTest(npyscreen.BoxTitle):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # print(
+        #     f"CardTest relx {self.relx} rely {self.rely} width {self.width} height {self.height}",
+        #     file=sys.stderr,
+        # )
         self.text = self.parent.add(
             npyscreen.MultiLineEdit,
             value="",
@@ -474,13 +469,13 @@ class LargeCardPool:
 """
 
 
-class CardsContainer(npyscreen.BoxTitle):
+class CardsContainer(npyscreen.widget.Widget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.hidden = True
+        # self.hidden = True
 
         # print(kwargs, file=sys.stderr)
-        # TODO pass this in from server or None if server doesn't know
+        # TODO pass this in from game creation screen or None if server doesn't know
         self.MAX_CARDS = kwargs["max_cards"]  # 5
         self.LARGE_CARD_WIDTH = kwargs["large_card_width"]
         self.LARGE_CARD_HEIGHT = kwargs["large_card_height"]
@@ -495,8 +490,9 @@ class CardsContainer(npyscreen.BoxTitle):
         self.plaintext_cards = self.parent.add(
             npyscreen.FixedText,
             value="TESTING",
+            editable=False,
             relx=self.relx,
-            rely=self.rely + (self.height // 2),
+            rely=self.rely + ((self.height - 1) // 2),
             width=self.width,
             height=self.height,
             hidden=True,
@@ -514,9 +510,7 @@ class CardsContainer(npyscreen.BoxTitle):
         )
         middle = self.width // 2
         total_cards_width = max_cards * (self.LARGE_CARD_WIDTH + 1) - 1
-        starting_x = self.relx + max(
-            0, (middle - math.ceil(total_cards_width / 2))
-        )  # TODO CENTER
+        starting_x = self.relx + max(0, (middle - math.ceil(total_cards_width / 2)))
         for i in range(len(self.cards_info)):
             # print(f"card {self.cards_info}", file=sys.stderr)
             rank = self.cards_info[i]["rank"]
@@ -586,6 +580,7 @@ class MainForm(npyscreen.FormWithMenus):
         self.add_handlers(new_handlers)
 
         y, x = self.useable_space()
+        # print(f"x {x} y {y}", file=sys.stderr)
         board_height = y * 5 // 8  # just make it minus the buttons and player info
         self.BoardArea = self.add(
             BoardArea, name="Board", editable=False, max_height=board_height
@@ -638,10 +633,10 @@ class MainForm(npyscreen.FormWithMenus):
         )
         LARGE_CARD_WIDTH = 11
         LARGE_CARD_HEIGHT = 8
-        # print(
-        #     f" hole cards container relx {self.HoleCards.relx} rely {self.HoleCards.rely} width {self.HoleCards.width -2} height {self.HoleCards.height -2 }",
-        #     file=sys.stderr,
-        # )
+        print(
+            f" hole cards container relx {self.HoleCards.relx+1} rely {self.HoleCards.rely+1} width {self.HoleCards.width -2} height {self.HoleCards.height -2 }",
+            file=sys.stderr,
+        )
         self.hole_cards_container = self.add(
             CardsContainer,
             large_card_width=LARGE_CARD_WIDTH,
@@ -655,7 +650,7 @@ class MainForm(npyscreen.FormWithMenus):
             height=self.HoleCards.height - 2,
             max_cards=self.max_hole_cards,
         )
-        self.hole_cards_container.set_cards([])  # TODO pass in card data
+        self.hole_cards_container.set_cards([])
 
         player_width = 20
         player_height = 5
@@ -722,13 +717,13 @@ class MainForm(npyscreen.FormWithMenus):
             right_large = test_right
         possible_large_card_width = right_large - left_large + 1
         if possible_large_card_width >= self.max_community_cards * LARGE_CARD_WIDTH:
-            # print("large enough", file=sys.stderr)
+            print("large enough", file=sys.stderr)
             community_card_width = possible_large_card_width
             community_card_height = LARGE_CARD_HEIGHT
             community_card_relx = left_large
             community_card_rely = top_large
         else:
-            # print("not large enough", file=sys.stderr)
+            print("not large enough", file=sys.stderr)
             middle_y = self.BoardArea.rely + (self.BoardArea.height // 2)
             top_large = middle_y
             bottom_large = middle_y
@@ -755,11 +750,11 @@ class MainForm(npyscreen.FormWithMenus):
             community_card_width = possible_large_card_width
             community_card_height = 1
             community_card_relx = left_large
-            community_card_rely = right_large
-        # print(
-        #     f"relx {community_card_relx} rely {community_card_rely} width {community_card_width} height {community_card_height}",
-        #     file=sys.stderr,
-        # )
+            community_card_rely = top_large
+        print(
+            f"relx {community_card_relx} rely {community_card_rely} width {community_card_width} height {community_card_height}\n\n",
+            file=sys.stderr,
+        )
         self.community_cards_container = self.add(
             CardsContainer,
             editable=False,
