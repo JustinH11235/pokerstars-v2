@@ -1142,6 +1142,8 @@ def on_updated_table_info(data):
             last_action_text = "Called"
         elif p_state == PlayerState.BET:
             last_action_text = f"Bet {player['current_bet']}"
+        elif p_state == PlayerState.RAISED:
+            last_action_text = f"Raised to {player['current_bet']}"
         if last_action_text != None:
             form.SeatBoxes[seatbox_ind_from_seat(seat)].footer = last_action_text
 
