@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import curses
+import subprocess
 import math
 import sys
 import os
@@ -18,6 +19,54 @@ from shared import (
 import socketio
 import npyscreen
 import art
+
+
+def play_sound_by_name(sound_names):
+    does_paplay_work = None
+    try:
+        subprocess.run(
+            ["paplay", "--version"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+        does_paplay_work = True
+    except FileNotFoundError:
+        does_paplay_work = False
+    except subprocess.CalledProcessError:
+        does_paplay_work = False
+    if not does_paplay_work:
+        return None
+    shortest_files = {name: None for name in sound_names}
+    for root, dirs, files in os.walk("/usr/share/sounds"):
+        for file in files:
+            for name in sound_names:
+                if name in file:
+                    sound_path = os.path.join(root, file)
+                    if shortest_files[name] is None or len(sound_path) < len(
+                        shortest_files[name]
+                    ):
+                        shortest_files[name] = sound_path
+    for name, shortest_file in shortest_files.items():
+        if shortest_file is not None:
+            subprocess.run(["paplay", shortest_file])
+            return True
+    return None
+
+
+def play_new_action_sound():
+    ret = play_sound_by_name(["message", "bell", "complete"])
+    if ret is None:
+        # fallback for non-linux/ubuntu
+        curses.beep()
+
+
+def play_new_card_sound():
+    # trash-empty works well for cards being placed
+    ret = play_sound_by_name(["trash-empty"])
+    # if ret is None:
+    #     # fallback for non-linux/ubuntu
+    #     curses.beep()
 
 
 class PokerTheme(npyscreen.ThemeManager):
@@ -1071,6 +1120,8 @@ def on_updated_table_info(data):
     else:
         form.BoardArea.footer = f'Pot: {data["main_pot_including_bets"]} ⛁'  # \u26C3
 
+    if data["community_cards"] != form.community_cards_container.cards_info:
+        play_new_card_sound()
     form.community_cards_container.set_cards(data["community_cards"])
 
     for player in data["players"]:
@@ -1079,6 +1130,10 @@ def on_updated_table_info(data):
             my_seat = player["seat"]
             form.hole_cards_container.set_cards(player["hole_cards"])
             if player["client_player_action"] is not None:
+                if client_player_action is None:
+                    # alert player new action is required
+                    curses.flash()
+                    play_new_action_sound()
                 client_player_action = player["client_player_action"]
                 if client_player_action["can_raise"]:
                     form.BetBox.hidden = False
@@ -1103,6 +1158,7 @@ def on_updated_table_info(data):
                 if client_player_action["can_call"]:
                     form.CallButton.name = f"{client_player_action['call_amount']}"
             else:
+                client_player_action = None
                 # don't have any action
                 form.BetBox.min_raise = None
                 form.BetBox.stack = None
@@ -1155,11 +1211,15 @@ def on_updated_table_info(data):
 
 
 def connect_to_server():
-    port = 8000
-    if len(sys.argv) >= 2:
+    if len(sys.argv) == 2:
         address = sys.argv[1]
+        port = 8000
+    elif len(sys.argv) == 3:
+        address = sys.argv[1]
+        port = int(sys.argv[2])
     else:
         address = "localhost"
+        port = 8000
     sio.connect(f"http://{address}:{port}")
 
 
