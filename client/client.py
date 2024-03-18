@@ -35,10 +35,13 @@ def extract_version_from_file(file_content):
 
 
 def get_latest_version():
-    github_raw_url = f"https://raw.githubusercontent.com/JustinH11235/pokerstars-v2/main/client/client.py"
+    github_client_url = f"https://raw.githubusercontent.com/JustinH11235/pokerstars-v2/main/client/client.py"
+    github_shared_url = (
+        f"https://raw.githubusercontent.com/JustinH11235/pokerstars-v2/main/shared.py"
+    )
 
     # Fetch file contents from GitHub
-    response = requests.get(github_raw_url)
+    response = requests.get(github_client_url)
     if response.status_code == 200:
         github_file_content = response.text
 
@@ -57,7 +60,16 @@ def get_latest_version():
                 # Replace local file with GitHub file contents
                 with open(client_filepath, "w") as local_file:
                     local_file.write(github_file_content)
-                return True
+
+                import shared
+
+                shared_filepath = os.path.abspath(shared.__file__)
+                shared_response = requests.get(github_shared_url)
+                if shared_response.status_code == 200:
+                    shared_file_content = shared_response.text
+                    with open(shared_filepath, "w") as shared_file:
+                        shared_file.write(shared_file_content)
+                    return True
     return False
 
 

@@ -4,6 +4,7 @@
 
 - Install Python 3.9.18 (any Python 3.9.x should work though)
     - Python 3.10.6 worked on Windows
+    - Python 3.12 didn't work on Windows
 - Install the Python dependencies needed:
     - Find the file path to the client/requirements.txt file (e.g. `C:\Users\username\Downloads\pokerstars-v2\client\requirements_windows.txt`)
     - In your terminal, run the command `pip install -r C:\Users\username\Downloads\pokerstars-v2\client\requirements_windows.txt`
