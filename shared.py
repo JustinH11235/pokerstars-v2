@@ -1011,7 +1011,6 @@ class TableInfo:
      Goes to End Hand if there's only 1 person left. Otherwise goes to next_state."""
 
     def go_to_showdown_or_end_hand_else(self, next_state):
-        # TODO if folds to BB, BB is allowed to check
         if self.get_num_players(POT_ELIGIBLE_PLAYER_STATES) == 1:
             self.game_state = GameState.END_HAND
         elif (
@@ -1024,6 +1023,16 @@ class TableInfo:
             self.game_state = next_state
 
     def some_player_needs_to_act(self):
+        if self.get_num_players(POT_ELIGIBLE_PLAYER_STATES) == 1:
+            # if everyone but 1 folded
+            return False
+        elif (
+            self.get_num_players(POT_ELIGIBLE_PLAYER_STATES)
+            - self.get_num_players([PlayerState.ALL_IN])
+            == 1
+        ):
+            # if everyone but 1 is all-in
+            return False
         return any(self.player_needs_to_act(player) for player in self.players)
 
     def player_needs_to_act(self, player: PlayerInfo):
