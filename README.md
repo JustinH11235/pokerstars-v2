@@ -16,6 +16,9 @@
     - Find the server IP Address that you want to connect to (e.g. `something.a.b.c`)
     - In your terminal, run the command `python3 client.py something.a.b.c`
 
+### Notes
+
+- Using `python client.py IP --no-auto-update` will disable the auto-update feature, which keeps your client up to date with the latest version on GitHub.
 
 ## Server Installation Instructions
 
