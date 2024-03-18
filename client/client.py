@@ -57,6 +57,8 @@ def get_latest_version():
                 # Replace local file with GitHub file contents
                 with open(client_filepath, "w") as local_file:
                     local_file.write(github_file_content)
+                return True
+    return False
 
 
 def play_sound_by_name(sound_names):
@@ -1251,6 +1253,11 @@ def on_updated_table_info(data):
 
 
 def connect_to_server():
+    auto_update = "--no-auto-update" not in sys.argv
+    if auto_update:
+        if get_latest_version():
+            print("Updated to latest version, please try again.")
+            exit(0)
     if len(sys.argv) == 2:
         address = sys.argv[1]
         port = 8000
