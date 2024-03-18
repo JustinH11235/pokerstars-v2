@@ -19,6 +19,56 @@ import socketio
 import npyscreen
 import art
 
+
+class PokerTheme(npyscreen.ThemeManager):
+    _colors_to_define = (
+        ("BLACK_WHITE", curses.COLOR_BLACK, curses.COLOR_WHITE),
+        ("BLUE_BLACK", curses.COLOR_BLUE, curses.COLOR_BLACK),
+        ("CYAN_BLACK", curses.COLOR_CYAN, curses.COLOR_BLACK),
+        ("GREEN_BLACK", curses.COLOR_GREEN, curses.COLOR_BLACK),
+        ("MAGENTA_BLACK", curses.COLOR_MAGENTA, curses.COLOR_BLACK),
+        ("RED_BLACK", curses.COLOR_RED, curses.COLOR_BLACK),
+        ("YELLOW_BLACK", curses.COLOR_YELLOW, curses.COLOR_BLACK),
+        ("BLACK_RED", curses.COLOR_BLACK, curses.COLOR_RED),
+        ("BLACK_BLUE", curses.COLOR_BLACK, curses.COLOR_BLUE),
+        ("BLACK_GREEN", curses.COLOR_BLACK, curses.COLOR_GREEN),
+        ("BLACK_YELLOW", curses.COLOR_BLACK, curses.COLOR_YELLOW),
+        ("BLUE_WHITE", curses.COLOR_BLUE, curses.COLOR_WHITE),
+        ("CYAN_WHITE", curses.COLOR_CYAN, curses.COLOR_WHITE),
+        ("GREEN_WHITE", curses.COLOR_GREEN, curses.COLOR_WHITE),
+        ("MAGENTA_WHITE", curses.COLOR_MAGENTA, curses.COLOR_WHITE),
+        ("RED_WHITE", curses.COLOR_RED, curses.COLOR_WHITE),
+        ("YELLOW_WHITE", curses.COLOR_YELLOW, curses.COLOR_WHITE),
+    )
+
+    default_colors = {
+        "DEFAULT": "WHITE_BLACK",
+        "FORMDEFAULT": "WHITE_BLACK",
+        "NO_EDIT": "BLUE_BLACK",
+        "STANDOUT": "CYAN_BLACK",
+        "CURSOR": "WHITE_BLACK",
+        "CURSOR_INVERSE": "BLACK_WHITE",
+        "LABEL": "GREEN_BLACK",
+        "LABELBOLD": "WHITE_BLACK",
+        "CONTROL": "YELLOW_BLACK",
+        "WARNING": "RED_BLACK",
+        "CRITICAL": "BLACK_RED",
+        "GOOD": "GREEN_BLACK",
+        "GOODHL": "GREEN_BLACK",
+        "VERYGOOD": "BLACK_GREEN",
+        "CAUTION": "YELLOW_BLACK",
+        "CAUTIONHL": "BLACK_YELLOW",
+        "DIAMONDS": "BLUE_BLACK",
+        "HEARTS": "RED_BLACK",
+        "SPADES": "WHITE_BLACK",
+        "CLUBS": "GREEN_BLACK",
+        "DIAMONDS_BG": "BLACK_BLUE",
+        "HEARTS_BG": "BLACK_RED",
+        "SPADES_BG": "BLACK_WHITE",
+        "CLUBS_BG": "BLACK_GREEN",
+    }
+
+
 BLUE = "NO_EDIT"
 GREEN = "LABEL"
 RED = "DANGER"
@@ -27,7 +77,7 @@ RED_WITH_BACKGROUND = "CRITICAL"
 BLACK_WITH_BACKGROUND = "CURSOR_INVERSE"
 GREEN_WITH_BACKGROUND = "VERYGOOD"
 YELLOW_WITH_BACKGROUND = "CAUTIONHL"
-BLUE_WITH_BACKGROUND = "BLUE_WHITE"
+BLUE_WITH_BACKGROUND = "DIAMONDS_BG"
 ACTION_ON_COLOR = "CAUTIONHL"
 # 'DEFAULT'     : 'WHITE_BLACK',
 # 'FORMDEFAULT' : 'WHITE_BLACK',
@@ -64,10 +114,26 @@ def color_of(suit: Suit):
         return BLUE
     elif suit == Suit.CLUBS:
         return GREEN
+    elif suit == Suit.UNKNOWN:
+        return BLACK
+
+
+def background_color_of(suit: Suit):
+    if suit == Suit.SPADES:
+        return BLACK_WITH_BACKGROUND
+    elif suit == Suit.HEARTS:
+        return RED_WITH_BACKGROUND
+    elif suit == Suit.DIAMONDS:
+        return BLUE_WITH_BACKGROUND
+    elif suit == Suit.CLUBS:
+        return GREEN_WITH_BACKGROUND
+    elif suit == Suit.UNKNOWN:
+        return "DEFAULT"
 
 
 class App(npyscreen.NPSAppManaged):
     def onStart(self):
+        npyscreen.setTheme(PokerTheme)
         self.addForm("MAIN", MainForm, name="PokerStars V2")
 
 
@@ -487,22 +553,38 @@ class CardsContainer(npyscreen.widget.Widget):
         )
         self.cards_info = []
         self.large_cards = []
-        self.plaintext_cards = self.parent.add(
-            npyscreen.FixedText,
-            value="TESTING",
-            color="LABEL",
-            editable=False,
-            relx=self.relx,
-            rely=self.rely + ((self.height - 1) // 2),
-            width=self.width,
-            height=self.height,
-            hidden=True,
-        )
+        # make separate FixedText's for different colors
+        self.plaintext_cards = []
+        for i in range(self.width):
+            self.plaintext_cards.append(
+                self.parent.add(
+                    npyscreen.FixedText,
+                    value="",
+                    editable=False,
+                    relx=self.relx + i,
+                    rely=self.rely + ((self.height - 1) // 2),
+                    width=2,
+                    height=1,
+                    hidden=True,
+                )
+            )
+        # self.plaintext_cards = self.parent.add(
+        #     npyscreen.FixedText,
+        #     value="TESTING",
+        #     # color="LABEL",
+        #     editable=False,
+        #     relx=self.relx,
+        #     rely=self.rely + ((self.height - 1) // 2),
+        #     width=self.width,
+        #     height=self.height,
+        #     hidden=True,
+        # )
 
     def clear_current_displayed_cards(self):
         self.large_card_pool.return_cards(self.large_cards)
         self.large_cards = []
-        self.plaintext_cards.hidden = True
+        for i in range(len(self.plaintext_cards)):
+            self.plaintext_cards[i].hidden = True
 
     def draw_large_cards(self):
         self.clear_current_displayed_cards()
@@ -529,18 +611,46 @@ class CardsContainer(npyscreen.widget.Widget):
         max_cards = (
             self.MAX_CARDS if self.MAX_CARDS is not None else len(self.cards_info)
         )
-        text = ""
+        text_with_color = []
+        # text = ""
         for i in range(len(self.cards_info)):
             rank = self.cards_info[i]["rank"]
             suit = Suit.decode(self.cards_info[i]["suit"])
-            text += f"{rank}{suit.value}"
+            # text += f"{rank}{suit.value}"
+            text_with_color.append(
+                {"text": f"{rank}{suit.value}", "color": background_color_of(suit)}
+            )
         for _ in range(max_cards - len(self.cards_info)):
             # placeholder
-            # TODO make each card its own FixedText to have different colors
-            text += "  "
-        self.plaintext_cards.value = center_text(text, self.width, self.height)
-
-        self.plaintext_cards.hidden = False
+            # text += "  "
+            text_with_color.append({"text": "  ", "color": "DEFAULT"})
+        # self.plaintext_cards.value = center_text(text, self.width, self.height)
+        # self.plaintext_cards.hidden = False
+        centered_text = center_text(
+            "".join([i["text"] for i in text_with_color]), self.width, 1
+        )
+        # print(f'centered_text "{centered_text}"', file=sys.stderr)
+        # get whitespace padding manually
+        left_padding = len(centered_text) - len(centered_text.lstrip())
+        if centered_text.lstrip() != "":
+            ind = 0
+            while ind < left_padding:
+                self.plaintext_cards[ind].hidden = True
+                ind += 1
+            for card in text_with_color:
+                # print(
+                #     f"ind {ind} plaintextlen {len(self.plaintext_cards)}",
+                #     file=sys.stderr,
+                # )
+                # print([str(ord(i)) for i in card["text"]], file=sys.stderr)
+                for char in card["text"]:
+                    self.plaintext_cards[ind].value = char
+                    self.plaintext_cards[ind].color = card["color"]
+                    self.plaintext_cards[ind].hidden = False
+                    ind += 1
+            while ind < len(self.plaintext_cards):
+                self.plaintext_cards[ind].hidden = True
+                ind += 1
 
     def set_cards(self, cards_info):
         self.cards_info = cards_info
@@ -780,11 +890,6 @@ class MainForm(npyscreen.FormWithMenus):
             width=community_card_width,
             height=community_card_height,
         )
-        # self.community_cards_container.set_cards(
-        #     [0, 0, 0, 0, 0]
-        # )  # TODO pass in card data
-        # TODO pot and sidepots (if not enough room,
-        #  put cards in middle and sidepot on footer)
 
     # async def while_waiting(self):
     #     ind = 0
