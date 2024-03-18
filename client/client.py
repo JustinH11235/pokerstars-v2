@@ -289,13 +289,13 @@ def center_text(s, width, height):
     return ("\n" * y_padding) + "\n".join([(" " * x_padding) + l for l in lines])
 
 
-class CardTest(npyscreen.BoxTitle):
+class LargeCardWidget(npyscreen.BoxTitle):
     # _contained_widget = npyscreen.MultiLineEdit
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # print(
-        #     f"CardTest relx {self.relx} rely {self.rely} width {self.width} height {self.height}",
+        #     f"LargeCardWidget relx {self.relx} rely {self.rely} width {self.width} height {self.height}",
         #     file=sys.stderr,
         # )
         self.text = self.parent.add(
@@ -349,7 +349,7 @@ class LargeCard:
         color = color_of(self.suit)
         # print(f"color {color}", file=sys.stderr)
         self.card_widget = form_ref.add(
-            CardTest,
+            LargeCardWidget,
             name=self.suit.value,
             footer=self.suit.value,
             height=self.card_height,
@@ -462,7 +462,7 @@ class LargeCardPool:
 
 
 """
-[CardsContainer] Handles display of cards using a resuable pool of [CardTest]'s.
+[CardsContainer] Handles display of cards using a resuable pool of [LargeCardWidget]'s.
     Allows you to pass in new card info and it will rerender the cards.
     TODO allow for all cards to be selectable, add method to get selected cards
         (for when server asks user to select cards, e.g. discard or swap)
@@ -490,6 +490,7 @@ class CardsContainer(npyscreen.widget.Widget):
         self.plaintext_cards = self.parent.add(
             npyscreen.FixedText,
             value="TESTING",
+            color="LABEL",
             editable=False,
             relx=self.relx,
             rely=self.rely + ((self.height - 1) // 2),
@@ -633,10 +634,10 @@ class MainForm(npyscreen.FormWithMenus):
         )
         LARGE_CARD_WIDTH = 11
         LARGE_CARD_HEIGHT = 8
-        print(
-            f" hole cards container relx {self.HoleCards.relx+1} rely {self.HoleCards.rely+1} width {self.HoleCards.width -2} height {self.HoleCards.height -2 }",
-            file=sys.stderr,
-        )
+        # print(
+        #     f" hole cards container relx {self.HoleCards.relx+1} rely {self.HoleCards.rely+1} width {self.HoleCards.width -2} height {self.HoleCards.height -2 }",
+        #     file=sys.stderr,
+        # )
         self.hole_cards_container = self.add(
             CardsContainer,
             large_card_width=LARGE_CARD_WIDTH,
@@ -682,6 +683,19 @@ class MainForm(npyscreen.FormWithMenus):
                     rely=player_y,
                 )
             )
+            # add villain hole card displays
+            villain_hole_card_offset = 2
+            self.SeatBoxes[-1].hole_cards = self.add(
+                CardsContainer,
+                large_card_width=LARGE_CARD_WIDTH,
+                large_card_height=LARGE_CARD_HEIGHT,
+                editable=False,
+                relx=self.SeatBoxes[-1].relx + 1,
+                rely=self.SeatBoxes[-1].rely + 1 + villain_hole_card_offset,
+                width=self.SeatBoxes[-1].width - 2,
+                height=1,
+                max_cards=self.max_hole_cards,
+            )
             seat += 1
 
         # find the farthest our community cards can reach without hitting a seat
@@ -692,7 +706,7 @@ class MainForm(npyscreen.FormWithMenus):
             self.BoardArea.relx
             + (self.BoardArea.width // 2)
             - (3 * LARGE_CARD_WIDTH // 2)
-        )
+        )  # 3 is arbitrary to speed it up
         right_large = (
             self.BoardArea.relx
             + (self.BoardArea.width // 2)
@@ -717,13 +731,13 @@ class MainForm(npyscreen.FormWithMenus):
             right_large = test_right
         possible_large_card_width = right_large - left_large + 1
         if possible_large_card_width >= self.max_community_cards * LARGE_CARD_WIDTH:
-            print("large enough", file=sys.stderr)
+            # print("large enough", file=sys.stderr)
             community_card_width = possible_large_card_width
             community_card_height = LARGE_CARD_HEIGHT
             community_card_relx = left_large
             community_card_rely = top_large
         else:
-            print("not large enough", file=sys.stderr)
+            # print("not large enough", file=sys.stderr)
             middle_y = self.BoardArea.rely + (self.BoardArea.height // 2)
             top_large = middle_y
             bottom_large = middle_y
@@ -751,10 +765,10 @@ class MainForm(npyscreen.FormWithMenus):
             community_card_height = 1
             community_card_relx = left_large
             community_card_rely = top_large
-        print(
-            f"relx {community_card_relx} rely {community_card_rely} width {community_card_width} height {community_card_height}\n\n",
-            file=sys.stderr,
-        )
+        # print(
+        #     f"relx {community_card_relx} rely {community_card_rely} width {community_card_width} height {community_card_height}\n\n",
+        #     file=sys.stderr,
+        # )
         self.community_cards_container = self.add(
             CardsContainer,
             editable=False,
@@ -897,13 +911,16 @@ def connect():
 
 @sio.event
 def connect_error(data):
-    # print("The connection failed! " + str(data))
+    # do nothing, the user may reconnect, let disconnect handle it.
     pass
 
 
 @sio.event
 def disconnect():
     # print("I'm disconnected!")
+    form = MyApp.getForm("MAIN")
+    form.name = "PokerStars V2 - Disconnected..."
+    form.display()
     pass
 
 
@@ -939,6 +956,7 @@ def on_updated_table_info(data):
         form.SeatBoxes[seat]._my_widgets[0].value = ""
         form.SeatBoxes[seat].color = "DEFAULT"
         form.SeatBoxes[seat].footer = ""
+        form.SeatBoxes[seat].hole_cards.set_cards([])
 
     form.name = f'{data["name"]} ({data["sm_blind"]}/{data["bg_blind"]}) - Hand #{data["hand_num"]}'
     form.num_seats = str(data["num_seats"])
@@ -951,6 +969,7 @@ def on_updated_table_info(data):
     form.community_cards_container.set_cards(data["community_cards"])
 
     for player in data["players"]:
+        seat = player["seat"]
         if player["is_player"]:
             my_seat = player["seat"]
             form.hole_cards_container.set_cards(player["hole_cards"])
@@ -990,9 +1009,9 @@ def on_updated_table_info(data):
                 if form._widgets__[form.editw].hidden:
                     form._widgets__[form.editw].entry_widget.h_exit_right(None)
         else:
-            # TODO display opponents hole cards somewhere
-            pass
-        seat = player["seat"]
+            form.SeatBoxes[seatbox_ind_from_seat(seat)].hole_cards.set_cards(
+                player["hole_cards"]
+            )
         seat_name = f"{player['name']}"
         if data["dealer"] == seat:
             seat_name += f" {chr(0x24B9)}"
@@ -1003,7 +1022,7 @@ def on_updated_table_info(data):
         ]
         if player["current_bet"] > 0:
             inside_box_text.append(f"Bet: {player['current_bet']} ⛁")
-        form.SeatBoxes[seatbox_ind_from_seat(seat)]._my_widgets[0].value = "\n\n".join(
+        form.SeatBoxes[seatbox_ind_from_seat(seat)]._my_widgets[0].value = "\n".join(
             inside_box_text
         )
         p_state = PlayerState.decode(player["state"])
@@ -1039,5 +1058,4 @@ def connect_to_server():
 
 if __name__ == "__main__":
     connect_to_server()
-    print("connected.")
     MyApp.run()

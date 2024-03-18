@@ -111,6 +111,7 @@ class Suit(Enum):
     HEARTS = "♥"
     DIAMONDS = "♦"
     CLUBS = "♣"
+    UNKNOWN = "-"
 
     def encode(self):
         return str(self)
@@ -184,16 +185,20 @@ class Card:
         if is_players_cards or self.face_up:
             rank = self.RANK_MAP[self.rank]
             suit = self.SUIT_MAP[self.suit]
-            print(
-                f"rank: {rank}, suit: {suit.encode()} self.rank: {self.rank}, self.suit: {self.suit}"
-            )
+            # print(
+            #     f"rank: {rank}, suit: {suit.encode()} self.rank: {self.rank}, self.suit: {self.suit}"
+            # )
             return {
                 "rank": rank,
                 "suit": suit.encode(),
                 "face_up": self.face_up,
             }
         else:
-            return None
+            return {
+                "rank": "?",
+                "suit": Suit.UNKNOWN.encode(),
+                "face_up": self.face_up,
+            }
 
 
 """
