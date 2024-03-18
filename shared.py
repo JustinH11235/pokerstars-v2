@@ -346,7 +346,9 @@ class PlayerInfo:
         self.client_player_action: ClientPlayerAction = None
         self.hole_cards: List[Card] = []
         self.stats = PlayerStats()
-        self.is_connected = True
+        self.is_connected = True  # set when socketio gets disconnect
+        # Time when player's action started, used to force sit-out
+        self.action_start_time = None
 
     def get_view(self, player):
         # if viewer is not myself, do not show my cards,
@@ -453,8 +455,10 @@ class TableInfo:
 
     def add_player(self, name, seat, sio_id):
         if name in [p.name for p in self.players]:
+            print(f"player {name} already exists in table {self.name}")
             return False
         if seat not in self.get_open_seats():
+            print(f"seat {seat} is not open in table {self.name}")
             return False
         self.players.append(PlayerInfo(name, seat, sio_id))
         return True
@@ -616,21 +620,37 @@ class TableInfo:
     #  and the min-raise is as-if the < full raiser hadn't even acted.
 
     """ Performs action for player at seat self.actionOn.
-     Does nothing if player doesnt have an action queued. """
+     Does nothing if player doesnt have an action queued.
+     If time has run out for player to act, sits player out. """
 
     def perform_next_player_action(self):
         p: PlayerInfo = self.get_player_at_seat(self.action_on)
-        if p.client_player_action is None or p.client_player_action.next_action is None:
+        if p.client_player_action is None:
+            return
+
+        # temporary until I add a menu option to force kick players (no vote)
+        if time.time() - p.action_start_time > 60 * 5:
+            p.state = PlayerState.NOT_SEATED
+            p.seat = None
+            p.client_player_action = None
+            p.action_start_time = None
+            print(f"player {p.name} timed out\n\n")
+            return
+
+        # client hasn't sent their action yet
+        if p.client_player_action.next_action is None:
             return
 
         if p.client_player_action.next_action.action == ClientNextActionType.FOLD:
             p.state = PlayerState.FOLDED
             p.client_player_action = None
+            p.action_start_time = None
         elif p.client_player_action.next_action.action == ClientNextActionType.CHECK:
             if p.client_player_action.can_check:
                 p.state = PlayerState.CHECKED
                 p.last_bet_responded_to = self.latest_bet
                 p.client_player_action = None
+                p.action_start_time = None
         elif p.client_player_action.next_action.action == ClientNextActionType.CALL:
             # call is the min(last bet, stack)
             call_amt = min(self.latest_bet, p.stack + p.current_bet)
@@ -642,6 +662,7 @@ class TableInfo:
                     p.is_all_in = True
                     p.state = PlayerState.ALL_IN
                     p.client_player_action = None
+                    p.action_start_time = None
             else:
                 if p.bet(call_amt) is not None:
                     # bet worked
@@ -649,6 +670,7 @@ class TableInfo:
                     p.last_bet_responded_to = self.latest_bet
                     p.state = PlayerState.CALLED
                     p.client_player_action = None
+                    p.action_start_time = None
         elif p.client_player_action.next_action.action == ClientNextActionType.BET:
             bet_amt = p.client_player_action.next_action.bet_amount
 
@@ -671,6 +693,7 @@ class TableInfo:
                                 p.is_all_in = True
                                 p.state = PlayerState.ALL_IN
                                 p.client_player_action = None
+                                p.action_start_time = None
                             else:
                                 # all-in is not full-raise
                                 self.latest_bet = bet_amt
@@ -679,6 +702,7 @@ class TableInfo:
                                 p.is_all_in = True
                                 p.state = PlayerState.ALL_IN
                                 p.client_player_action = None
+                                p.action_start_time = None
                     else:
                         if bet_amt >= p.client_player_action.min_raise:
                             # bet is legal and is full-raise other than player's stack
@@ -696,12 +720,14 @@ class TableInfo:
                                 else:
                                     p.state = PlayerState.RAISED
                                 p.client_player_action = None
+                                p.action_start_time = None
         # elif p.client_player_action.next_action.action == ClientNextActionType.ALL_IN:
         #     pass
         else:
             raise ValueError("Invalid action")
 
     def initialize_client_player_action(self, player):
+        player.action_start_time = time.time()
         can_check = player.current_bet == self.latest_bet
         can_call = player.current_bet < self.latest_bet
         call_amount = min(self.latest_bet, player.stack + player.current_bet)

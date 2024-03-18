@@ -38,7 +38,7 @@ async def connect(sid, environ, auth):
     if table_info is not None:
         open_seats = table_info.get_open_seats()
         table_info.add_player(
-            name="Player " + str(len(table_info.players)),
+            name="Player " + str(random.randint(1, 999)),
             seat=random.choice(open_seats),
             sio_id=sid,
         )

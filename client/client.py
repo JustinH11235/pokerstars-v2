@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# DONT REMOVE!! Version Identifier: |=V=| VERSION 1 |=V=|
+# DONT REMOVE!! Version Identifier: |=V=| VERSION 2 |=V=|
 
 import curses
 import subprocess
@@ -1177,6 +1177,8 @@ def on_updated_table_info(data):
     form.community_cards_container.set_cards(data["community_cards"])
 
     for player in data["players"]:
+        p_state = PlayerState.decode(player["state"])
+
         seat = player["seat"]
         if player["is_player"]:
             my_seat = player["seat"]
@@ -1191,6 +1193,7 @@ def on_updated_table_info(data):
                 client_player_action = player["client_player_action"]
                 if client_player_action["can_raise"]:
                     form.BetBox.hidden = False
+                    form.BetBox.editable = True
                     form.BetBox.min_raise = client_player_action["min_raise"]
                     form.BetBox.stack = player["stack"] + player["current_bet"]
                     if form.BetBox.value == "":
@@ -1201,10 +1204,14 @@ def on_updated_table_info(data):
                         form.BetBox.name = "Raise"
                 else:
                     form.BetBox.hidden = True
+                    form.BetBox.editable = False
 
                 form.CheckButton.hidden = not client_player_action["can_check"]
+                form.CheckButton.editable = client_player_action["can_check"]
                 form.CallButton.hidden = not client_player_action["can_call"]
+                form.CallButton.editable = client_player_action["can_call"]
                 form.FoldButton.hidden = False
+                form.FoldButton.editable = True
                 if form._widgets__[form.editw].hidden and hasattr(
                     form._widgets__[form.editw], "entry_widget"
                 ):
@@ -1218,44 +1225,49 @@ def on_updated_table_info(data):
                 form.BetBox.stack = None
                 form.BetBox.value = ""
                 form.BetBox.hidden = True
+                form.BetBox.editable = False
                 form.CheckButton.hidden = True
+                form.CheckButton.editable = False
                 form.CallButton.hidden = True
+                form.CallButton.editable = False
                 form.FoldButton.hidden = True
+                form.FoldButton.editable = False
                 if form._widgets__[form.editw].hidden:
                     form._widgets__[form.editw].entry_widget.h_exit_right(None)
         else:
-            form.SeatBoxes[seatbox_ind_from_seat(seat)].hole_cards.set_cards(
-                player["hole_cards"]
+            if p_state != PlayerState.NOT_SEATED:
+                form.SeatBoxes[seatbox_ind_from_seat(seat)].hole_cards.set_cards(
+                    player["hole_cards"]
+                )
+        if p_state != PlayerState.NOT_SEATED:
+            seat_name = f"{player['name']}"
+            if data["dealer"] == seat:
+                seat_name += f" {chr(0x24B9)}"
+            form.SeatBoxes[seatbox_ind_from_seat(seat)].name = seat_name
+            inside_box_text = [
+                f"Stack: {player['stack']} ⛁",
+                # f"Bet: {player['current_bet']} ⛁",
+            ]
+            if player["current_bet"] > 0:
+                inside_box_text.append(f"Bet: {player['current_bet']} ⛁")
+            form.SeatBoxes[seatbox_ind_from_seat(seat)]._my_widgets[0].value = (
+                "\n".join(inside_box_text)
             )
-        seat_name = f"{player['name']}"
-        if data["dealer"] == seat:
-            seat_name += f" {chr(0x24B9)}"
-        form.SeatBoxes[seatbox_ind_from_seat(seat)].name = seat_name
-        inside_box_text = [
-            f"Stack: {player['stack']} ⛁",
-            # f"Bet: {player['current_bet']} ⛁",
-        ]
-        if player["current_bet"] > 0:
-            inside_box_text.append(f"Bet: {player['current_bet']} ⛁")
-        form.SeatBoxes[seatbox_ind_from_seat(seat)]._my_widgets[0].value = "\n".join(
-            inside_box_text
-        )
-        p_state = PlayerState.decode(player["state"])
-        last_action_text = None
-        if p_state == PlayerState.FOLDED:
-            last_action_text = "Folded"
-        elif p_state == PlayerState.ALL_IN:
-            last_action_text = "All In"
-        elif p_state == PlayerState.CHECKED:
-            last_action_text = "Checked"
-        elif p_state == PlayerState.CALLED:
-            last_action_text = "Called"
-        elif p_state == PlayerState.BET:
-            last_action_text = f"Bet {player['current_bet']}"
-        elif p_state == PlayerState.RAISED:
-            last_action_text = f"Raised to {player['current_bet']}"
-        if last_action_text != None:
-            form.SeatBoxes[seatbox_ind_from_seat(seat)].footer = last_action_text
+            last_action_text = None
+            if p_state == PlayerState.FOLDED:
+                last_action_text = "Folded"
+            elif p_state == PlayerState.ALL_IN:
+                last_action_text = "All In"
+            elif p_state == PlayerState.CHECKED:
+                last_action_text = "Checked"
+            elif p_state == PlayerState.CALLED:
+                last_action_text = "Called"
+            elif p_state == PlayerState.BET:
+                last_action_text = f"Bet {player['current_bet']}"
+            elif p_state == PlayerState.RAISED:
+                last_action_text = f"Raised to {player['current_bet']}"
+            if last_action_text != None:
+                form.SeatBoxes[seatbox_ind_from_seat(seat)].footer = last_action_text
 
     if data["action_on"] is not None:
         form.SeatBoxes[seatbox_ind_from_seat(data["action_on"])].footer = ""
