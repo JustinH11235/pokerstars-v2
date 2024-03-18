@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
+
+# DONT REMOVE!! Version Identifier: |=V=| VERSION 1 |=V=|
+
 import curses
 import subprocess
+import requests
+import re
 import math
 import sys
 import os
@@ -19,6 +24,39 @@ from shared import (
 import socketio
 import npyscreen
 import art
+
+
+def extract_version_from_file(file_content):
+    match = re.search(r"\|\=V\=\| VERSION (\d+) \|\=V\=\|", file_content)
+    if match:
+        return match.group(1)
+    else:
+        return None
+
+
+def get_latest_version():
+    github_raw_url = f"https://raw.githubusercontent.com/JustinH11235/pokerstars-v2/main/client/client.py"
+
+    # Fetch file contents from GitHub
+    response = requests.get(github_raw_url)
+    if response.status_code == 200:
+        github_file_content = response.text
+
+        # Extract version number from GitHub file
+        github_version = extract_version_from_file(github_file_content)
+
+        # Extract version number from local file
+        client_filepath = os.path.abspath(__file__)
+        with open(client_filepath, "r") as local_file:
+            local_file_content = local_file.read()
+            local_version = extract_version_from_file(local_file_content)
+
+        # Compare version numbers
+        if github_version and local_version:
+            if github_version != local_version:
+                # Replace local file with GitHub file contents
+                with open(client_filepath, "w") as local_file:
+                    local_file.write(github_file_content)
 
 
 def play_sound_by_name(sound_names):
