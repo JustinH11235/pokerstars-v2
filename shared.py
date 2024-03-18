@@ -819,13 +819,11 @@ class TableInfo:
                     found_straight = False
             if found_straight:
                 return (True, self.max_card_rank(new_cards))
-            found_straight = True
-            new_cards2 = [ace] + new_cards
-            for i in range(1, len(new_cards2)):
-                if new_cards2[i].rank != new_cards2[i - 1].rank + 1:
-                    found_straight = False
-            if found_straight:
-                return (True, self.max_card_rank(new_cards2))
+            # check for wheel
+            if all(
+                c.rank == r for c, r in zip([ace] + cards_without_ace, [12, 0, 1, 2, 3])
+            ):
+                return (True, 3)
             else:
                 return (False,)
 
