@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# DONT REMOVE!! Version Identifier: |=V=| VERSION 2 |=V=|
+# DONT REMOVE!! Version Identifier: |=V=| VERSION 3 |=V=|
 
 import curses
 import subprocess
@@ -51,7 +51,7 @@ def get_latest_version():
 
         # Extract version number from local file
         client_filepath = os.path.abspath(__file__)
-        with open(client_filepath, "r") as local_file:
+        with open(client_filepath, "r", encoding="utf-8") as local_file:
             local_file_content = local_file.read()
             local_version = extract_version_from_file(local_file_content)
 
@@ -59,7 +59,7 @@ def get_latest_version():
         if github_version and local_version:
             if github_version != local_version:
                 # Replace local file with GitHub file contents
-                with open(client_filepath, "w") as local_file:
+                with open(client_filepath, "w", encoding="utf-8") as local_file:
                     local_file.write(github_file_content)
 
                 import shared
@@ -69,7 +69,7 @@ def get_latest_version():
                 if shared_response.status_code == 200:
                     shared_response.encoding = "utf-8"
                     shared_file_content = shared_response.text
-                    with open(shared_filepath, "w") as shared_file:
+                    with open(shared_filepath, "w", encoding="utf-8") as shared_file:
                         shared_file.write(shared_file_content)
                     return True
     return False
