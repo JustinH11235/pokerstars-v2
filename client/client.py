@@ -1073,38 +1073,28 @@ class Ellipse:
 
 
 """
-Hole Cards
-Your actions: Fold, Check, Call, Bet, Raise (allow user to type amount to bet) (maybe check on frontend for correctness but prob not).
-Community Cards
-Pot
-Opponents (stack sizes, actions (amount bet)) (Icon for who action is on) (icon for dealer button (or bold/color))
 TODO:
-- see if you can click on boxes by adding an event handler for check/call
-- Raise is when someones bet, set to min raise. If no bet set to Bet (min is BB)
+
+Client:
 - way to edit your own stack size
-- server track overall profit/loss
-- add raise slider
-- record hand histories on server
-- sound cues
-- run it 2x
-- button to popup a graph of everyone's profit/loss
-- buttons for check/call etc. instead of boxes?
-- allow showing cards with popup to confirm
-- add dealer button icon (D) next to name
-- If hold card (or board) area is small enough, show cards as text like A♠️2♠️
-- make player names only normal chars (below certain ascii value)
-- menu settings:
-    - setting to just show the A2 with color instead of suit icon next to it
+- Add raise slider
+- Client Menu Options:
+    - download P/L graph as image/overall P/L per person like unmasked
+    - show the A2 with color instead of suit icon next to it
     - BB view
-    - download P/L graph as image
-- add Pot/Sidepots under the community cards
-- create ThemeManager to get access to blue background and black background?
-- give percent of pot odds/pot odds as setting
-- track vpip, pfr, 3-bet % as optional setting
-- on connect have server tell client if it's on the right version, 
-    if not, client should error out
-- animation on cards when they are dealt
+    - percent of pot odds/pot odds as setting
+
+Make Game Creation Screen:
 - allow players to choose their seat
+- allow players to choose their name, can reconnect with same name and keep Player
+- make player names only normal chars (below certain ascii value)
+
+- allow showing cards with popup to confirm
+- track vpip, pfr, 3-bet % on server and send to clients to display
+- Record hand log on server, where everything is recorded, maybe allow Client to show recent log
+- Sound effects. Find Python library that works for Windows/Linux/Mac and download better sounds
+- run it 2x
+- animations on cards when they are dealt?
 """
 
 sio = socketio.Client()
