@@ -43,6 +43,7 @@ def get_latest_version():
     # Fetch file contents from GitHub
     response = requests.get(github_client_url)
     if response.status_code == 200:
+        response.encoding = "utf-8"
         github_file_content = response.text
 
         # Extract version number from GitHub file
@@ -66,6 +67,7 @@ def get_latest_version():
                 shared_filepath = os.path.abspath(shared.__file__)
                 shared_response = requests.get(github_shared_url)
                 if shared_response.status_code == 200:
+                    shared_response.encoding = "utf-8"
                     shared_file_content = shared_response.text
                     with open(shared_filepath, "w") as shared_file:
                         shared_file.write(shared_file_content)
