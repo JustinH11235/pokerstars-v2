@@ -118,10 +118,7 @@ def play_new_action_sound():
 
 def play_new_card_sound():
     # trash-empty works well for cards being placed
-    ret = play_sound_by_name(["trash"])
-    # if ret is None:
-    #     # fallback for non-linux/ubuntu
-    #     curses.beep()
+    play_sound_by_name(["trash"])
 
 
 class PokerTheme(npyscreen.ThemeManager):
@@ -283,8 +280,6 @@ class BetBox(npyscreen.BoxTitle):
         self.min_raise = None
         self.stack = None
         # TODO gray out if not valid raise/bet
-        # self.parent.HoleCards.value = "init"
-        # self.parent.HoleCards.display()
 
         # self._contained_widget.handlers.update(
         #     {
@@ -294,8 +289,6 @@ class BetBox(npyscreen.BoxTitle):
         # )
 
     def set_up_handlers(self):
-        # self.parent.HoleCards.value = "setup"
-        # self.parent.HoleCards.display()
         super(BetBox, self).set_up_handlers()
 
         self.handlers.update(
@@ -672,17 +665,6 @@ class CardsContainer(npyscreen.widget.Widget):
                     hidden=True,
                 )
             )
-        # self.plaintext_cards = self.parent.add(
-        #     npyscreen.FixedText,
-        #     value="TESTING",
-        #     # color="LABEL",
-        #     editable=False,
-        #     relx=self.relx,
-        #     rely=self.rely + ((self.height - 1) // 2),
-        #     width=self.width,
-        #     height=self.height,
-        #     hidden=True,
-        # )
 
     def clear_current_displayed_cards(self):
         self.large_card_pool.return_cards(self.large_cards)
@@ -1076,20 +1058,24 @@ class Ellipse:
 TODO:
 
 Client:
-- way to edit your own stack size
+- go clockwise around the table
 - Add raise slider
 - Client Menu Options:
     - download P/L graph as image/overall P/L per person like unmasked
     - show the A2 with color instead of suit icon next to it
     - BB view
     - percent of pot odds/pot odds as setting
+    - way to edit your own stack size
 
 Make Game Creation Screen:
-- allow players to choose their seat
 - allow players to choose their name, can reconnect with same name and keep Player
-- make player names only normal chars (below certain ascii value)
+- choose number of seats
+- choose small blind/big blind
+- allow players to choose their seat after in NOT_SEATED state
 
-- allow showing cards with popup to confirm
+- grey-out players who have folded/sitting out
+- grey out BetBox text if not valid and don't allow submit, can get this data from server
+- allow showing cards (without popup)
 - track vpip, pfr, 3-bet % on server and send to clients to display
 - Record hand log on server, where everything is recorded, maybe allow Client to show recent log
 - Sound effects. Find Python library that works for Windows/Linux/Mac and download better sounds
@@ -1137,7 +1123,7 @@ my_seat = None
 
 def seatbox_ind_from_seat(seat):
     if my_seat is not None:
-        return ((seat - my_seat) + num_seats) % num_seats
+        return ((my_seat - seat) + num_seats) % num_seats
     else:
         return seat
 
@@ -1241,7 +1227,7 @@ def on_updated_table_info(data):
         if p_state != PlayerState.NOT_SEATED:
             seat_name = f"{player['name']}"
             if data["dealer"] == seat:
-                seat_name += f" {chr(0x24B9)}"
+                seat_name = f"{chr(0x24B9)} " + seat_name
             form.SeatBoxes[seatbox_ind_from_seat(seat)].name = seat_name
             inside_box_text = [
                 f"Stack: {player['stack']} ⛁",
@@ -1277,7 +1263,6 @@ def on_updated_table_info(data):
 
 def connect_to_server():
     auto_update = "--no-auto-update" not in sys.argv
-    # remove --no-auto-update from sys.argv
     if "--no-auto-update" in sys.argv:
         sys.argv.remove("--no-auto-update")
     if auto_update:
