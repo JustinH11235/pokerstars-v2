@@ -41,7 +41,8 @@ def get_latest_version():
     )
 
     # Fetch file contents from GitHub
-    response = requests.get(github_client_url)
+    headers = {"Cache-Control": "no-cache", "Pragma": "no-cache"}
+    response = requests.get(github_client_url, headers=headers)
     if response.status_code == 200:
         response.encoding = "utf-8"
         github_file_content = response.text
@@ -65,7 +66,7 @@ def get_latest_version():
                 import shared
 
                 shared_filepath = os.path.abspath(shared.__file__)
-                shared_response = requests.get(github_shared_url)
+                shared_response = requests.get(github_shared_url, headers=headers)
                 if shared_response.status_code == 200:
                     shared_response.encoding = "utf-8"
                     shared_file_content = shared_response.text
